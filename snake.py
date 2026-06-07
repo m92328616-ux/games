@@ -1,6 +1,5 @@
 import turtle
 import random
-import os
 
 #  Game config const
 delay = 100 # Game loop in ms
@@ -10,29 +9,6 @@ ismoving = False # Input lock var prevent apid input errors
 game_over_flag = False
 food2 = None
 segments = []
-
-HIGHSCORE_FILE = "highscore.txt"
-
-def load_high_score():
-    try:
-        if os.path.exists(HIGHSCORE_FILE):
-            with open(HIGHSCORE_FILE, "r") as f:
-                text = f.read().strip()
-                if text.isdigit():
-                    return int(text)
-    except Exception:
-        pass
-    return 0
-
-
-def save_high_score(value):
-    try:
-        with open(HIGHSCORE_FILE, "w") as f:
-            f.write(str(value))
-    except Exception:
-        pass
-
-high_score = load_high_score()
 
 def place_food_item(food_item):
     """Place food away from the snake head, body, and other food."""
@@ -308,7 +284,6 @@ def game_loop():
             score += 10
             if score > high_score:
                 high_score = score
-                save_high_score(high_score)
             upd_score_disp()
 
             # Spawn second food once at score 100
@@ -339,7 +314,6 @@ def game_loop():
             score += 10
             if score > high_score:
                 high_score = score
-                save_high_score(high_score)
             upd_score_disp()
 
         # Shift trailing tail block in rev order
