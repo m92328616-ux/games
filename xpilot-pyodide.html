@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>XPilot - Pyodide</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { width: 100%; height: 100%; overflow: hidden; }
+        body {
+            font-family: Arial, sans-serif;
+            background: #0c0c18;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+        #gameContainer {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            aspect-ratio: 4/3;
+            background: #0c0c18;
+            border: 2px solid #444;
+            touch-action: none;
+            display: none;
+        }
+        canvas { display: block; width: 100%; height: 100%; }
+        #loading {
+            color: #c8c8c8;
+            text-align: center;
+            padding: 20px;
+        }
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: #c8c8c8;
+            font-size: 14px;
+            font-family: monospace;
+            z-index: 100;
+            pointer-events: none;
+        }
+        #deadMsg {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #dcdcdc;
+            font-size: 18px;
+            text-align: center;
+            background: rgba(0,0,0,0.7);
+            padding: 20px;
+            border-radius: 5px;
+            z-index: 200;
+            pointer-events: none;
+            display: none;
+        }
+
+        /* Mobile controls */
+        #controls {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 120px;
+            display: flex;
+            justify-content: space-between;
+            padding: 10px;
+            gap: 10px;
+            pointer-events: none;
+        }
+
+        .joystick-area {
+            width: 100px;
+            height: 100px;
+            background: rgba(100,100,150,0.3);
+            border: 2px solid #666;
+            border-radius: 50%;
+            pointer-events: auto;
+            position: relative;
+        }
+
+        .buttons-area {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            pointer-events: auto;
+        }
+
+        .control-btn {
+            width: 90px;
+            height: 40px;
+            background: rgba(100,150,100,0.3);
+            border: 2px solid #666;
+            color: #aaa;
+            font-size: 12px;
+            border-radius: 5px;
+            touch-action: none;
+            user-select: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .control-btn.active {
+            background: rgba(100,200,100,0.5);
+            color: #fff;
+        }
+
+        .control-btn.shoot {
+            flex: 1;
+            width: 90px;
+            height: auto;
+            min-height: 50px;
+        }
+
+        @media (max-width: 480px) {
+            #info { font-size: 12px; }
+            .control-btn { width: 70px; font-size: 11px; }
+        }
+    </style>
+</head>
+<body>
+    <div id="loading">Loading Pyodide and Python runtime...</div>
+    
+    <div id="gameContainer">
+        <canvas id="gameCanvas"></canvas>
+        <div id="info">
+            <div>Score: <span id="score">0</span></div>
+        </div>
+        <div id="deadMsg">
+            You Died<br>Press R to restart
+        </div>
+        <div id="controls">
+            <div class="joystick-area" id="joystick"></div>
+            <div class="buttons-area">
+                <button class="control-btn" id="thrustBtn">Thrust</button>
+                <button class="control-btn shoot" id="shootBtn">SHOOT</button>
+                <button class="control-btn" id="restartBtn" style="display:none;">Restart</button>
+            </div>
+        </div>
+    </div>
+
+    <script async src="https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js"></script>
+    <script>
+        async function main() {
+            const canvas = document.getElementById('gameCanvas');
+            const ctx = canvas.getContext('2d');
+            const gameContainer = document.getElementById('gameContainer');
+            
+            // Set canvas size
+            function setCanvasSize() {
+                const rect = gameContainer.getBoundingClientRect();
+                canvas.width = rect.width;
+                canvas.height = rect.height;
+            }
+
+            // Load Pyodide
+            let pyodide = await loadPyodide();
+            
+            // Python game code
+            const pythonCode = `
+import math
+import random
+
+WIDTH, HEIGHT = 800, 600
+
+class Player:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.vx = 0
+        self.vy = 0
+        self.angle = 0
+        self.thrust = 0
+        self.dead = False
+
+    def update(self, dt):
+        self.vx += math.cos(self.angle) * self.thrust * dt
+        self.vy += math.sin(self.angle) * self.thrust * dt
+        self.vx *= 0.995
+        self.vy *= 0.995
+        self.x += self.vx * dt
+        self.y += self.vy * dt
+        self.x %= WIDTH
+        self.y %= HEIGHT
+
+class Bullet:
+    def __init__(self, x, y, vx, vy):
+        self.x = x
+        self.y = y
+        self.vx = vx
+        self.vy = vy
+        self.life = 2.0
+
+    def update(self, dt):
+        self.x += self.vx * dt
+        self.y += self.vy * dt
+        self.life -= dt
+        self.x %= WIDTH
+        self.y %= HEIGHT
+
+class Enemy:
+    def __init__(self):
+        self.x = random.uniform(0, WIDTH)
+        self.y = random.uniform(0, HEIGHT)
+        ang = random.uniform(0, math.tau)
+        self.vx = math.cos(ang) * random.uniform(20, 80)
+        self.vy = math.sin(ang) * random.uniform(20, 80)
+        self.r = random.randint(10, 26)
+
+    def update(self, dt):
+        self.x += self.vx * dt
+        self.y += self.vy * dt
+        self.x %= WIDTH
+        self.y %= HEIGHT
+
+def create_game_state():
+    return {
+        'player': Player(WIDTH // 2, HEIGHT // 2),
+        'bullets': [],
+        'enemies': [Enemy() for _ in range(6)],
+        'score': 0,
+        'shoot_cool': 0,
+        'keys': {}
+    }
+
+game = create_game_state()
+
+def reset_game():
+    global game
+    game = create_game_state()
+
+def set_key(key, pressed):
+    game['keys'][key] = pressed
+    if key == 'r' and pressed and game['player'].dead:
+        reset_game()
+
+def update(dt):
+    player = game['player']
+    
+    player.thrust = 0
+    if game['keys'].get('up'): player.thrust = 200
+    if game['keys'].get('left'): player.angle -= 3 * dt
+    if game['keys'].get('right'): player.angle += 3 * dt
+
+    game['shoot_cool'] -= dt
+    if game['keys'].get('space') and game['shoot_cool'] <= 0 and not player.dead:
+        game['shoot_cool'] = 0.15
+        speed = 400
+        bx = player.x + math.cos(player.angle) * 16
+        by = player.y + math.sin(player.angle) * 16
+        bvx = player.vx + math.cos(player.angle) * speed
+        bvy = player.vy + math.sin(player.angle) * speed
+        game['bullets'].append(Bullet(bx, by, bvx, bvy))
+
+    if not player.dead:
+        player.update(dt)
+
+    for b in game['bullets'][:]:
+        b.update(dt)
+        if b.life <= 0:
+            game['bullets'].remove(b)
+
+    for e in game['enemies']:
+        e.update(dt)
+
+    if not player.dead:
+        for e in game['enemies']:
+            dist = math.hypot(player.x - e.x, player.y - e.y)
+            if dist < e.r + 8:
+                player.dead = True
+
+    for b in game['bullets'][:]:
+        for e in game['enemies'][:]:
+            dist = math.hypot(b.x - e.x, b.y - e.y)
+            if dist < e.r:
+                try:
+                    game['enemies'].remove(e)
+                    game['bullets'].remove(b)
+                except ValueError:
+                    pass
+                game['score'] += 10
+                game['enemies'].append(Enemy())
+                break
+
+def draw():
+    player = game['player']
+    return {
+        'player_x': player.x,
+        'player_y': player.y,
+        'player_angle': player.angle,
+        'player_dead': player.dead,
+        'bullets': [[b.x, b.y] for b in game['bullets']],
+        'enemies': [[e.x, e.y, e.r] for e in game['enemies']],
+        'score': game['score']
+    }
+`;
+
+            // Run Python code
+            pyodide.runPython(pythonCode);
+
+            // Hide loading, show game
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('gameContainer').style.display = 'block';
+            setCanvasSize();
+            window.addEventListener('resize', setCanvasSize);
+
+            // Get Python functions
+            const pyUpdate = pyodide.globals.get('update');
+            const pyDraw = pyodide.globals.get('draw');
+            const pySetKey = pyodide.globals.get('set_key');
+
+            // Touch input
+            const joystickEl = document.getElementById('joystick');
+            let joystickTouch = null;
+            let touch = { left: 0, right: 0, thrust: false, shoot: false };
+            
+            joystickEl.addEventListener('touchstart', (e) => {
+                joystickTouch = e.touches[0];
+                updateJoystick(e.touches[0]);
+            });
+            joystickEl.addEventListener('touchmove', (e) => {
+                if (joystickTouch) updateJoystick(e.touches[0]);
+            });
+            joystickEl.addEventListener('touchend', () => {
+                joystickTouch = null;
+                touch.left = 0;
+                touch.right = 0;
+            });
+
+            function updateJoystick(t) {
+                const rect = joystickEl.getBoundingClientRect();
+                const cx = rect.left + rect.width / 2;
+                const cy = rect.top + rect.height / 2;
+                const dx = t.clientX - cx;
+                const dy = t.clientY - cy;
+                const dist = Math.hypot(dx, dy);
+                const maxDist = rect.width / 2;
+                
+                if (dist > maxDist * 0.3) {
+                    const angle = Math.atan2(dy, dx);
+                    touch.left = Math.cos(angle);
+                    touch.right = Math.sin(angle);
+                }
+            }
+
+            // Buttons
+            document.getElementById('thrustBtn').addEventListener('touchstart', () => { touch.thrust = true; });
+            document.getElementById('thrustBtn').addEventListener('touchend', () => { touch.thrust = false; });
+
+            document.getElementById('shootBtn').addEventListener('touchstart', (e) => { e.preventDefault(); touch.shoot = true; });
+            document.getElementById('shootBtn').addEventListener('touchend', (e) => { e.preventDefault(); touch.shoot = false; });
+
+            document.getElementById('restartBtn').addEventListener('touchstart', () => {
+                pySetKey('r', true);
+                document.getElementById('restartBtn').style.display = 'none';
+            });
+
+            // Keyboard
+            const keyMap = {
+                'ArrowUp': 'up', 'w': 'up', 'W': 'up',
+                'ArrowLeft': 'left', 'a': 'left', 'A': 'left',
+                'ArrowRight': 'right', 'd': 'right', 'D': 'right',
+                ' ': 'space', 'Space': 'space',
+                'r': 'r', 'R': 'r'
+            };
+
+            window.addEventListener('keydown', (e) => {
+                if (keyMap[e.key]) pySetKey(keyMap[e.key], true);
+            });
+
+            window.addEventListener('keyup', (e) => {
+                if (keyMap[e.key]) pySetKey(keyMap[e.key], false);
+            });
+
+            // Game loop
+            let lastTime = Date.now();
+            function gameLoop() {
+                const now = Date.now();
+                const dt = Math.min((now - lastTime) / 1000, 0.05);
+                lastTime = now;
+
+                // Handle touch input
+                if (touch.left < -0.5) pySetKey('left', true);
+                else pySetKey('left', false);
+                if (touch.left > 0.5) pySetKey('right', true);
+                else pySetKey('right', false);
+                if (touch.thrust) pySetKey('up', true);
+                else pySetKey('up', false);
+                if (touch.shoot) pySetKey('space', true);
+                else pySetKey('space', false);
+
+                // Update and draw
+                pyUpdate(dt);
+                const state = pyDraw();
+
+                const scaleX = canvas.width / WIDTH;
+                const scaleY = canvas.height / HEIGHT;
+
+                ctx.fillStyle = '#0c0c18';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // Draw enemies
+                ctx.fillStyle = '#c87878';
+                for (const [ex, ey, er] of state.enemies) {
+                    ctx.beginPath();
+                    ctx.arc(ex * scaleX, ey * scaleY, er * scaleX, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                // Draw bullets
+                ctx.fillStyle = '#fff078';
+                for (const [bx, by] of state.bullets) {
+                    ctx.beginPath();
+                    ctx.arc(bx * scaleX, by * scaleY, 3 * scaleX, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                // Draw player
+                if (!state.player_dead) {
+                    ctx.fillStyle = '#b4c8ff';
+                    const heading = [Math.cos(state.player_angle), Math.sin(state.player_angle)];
+                    const right = [Math.cos(state.player_angle + 2.5), Math.sin(state.player_angle + 2.5)];
+                    const left = [Math.cos(state.player_angle - 2.5), Math.sin(state.player_angle - 2.5)];
+                    const scale = 12;
+                    const pts = [
+                        [(state.player_x + heading[0] * scale) * scaleX, (state.player_y + heading[1] * scale) * scaleY],
+                        [(state.player_x + right[0] * scale * 0.7) * scaleX, (state.player_y + right[1] * scale * 0.7) * scaleY],
+                        [(state.player_x + left[0] * scale * 0.7) * scaleX, (state.player_y + left[1] * scale * 0.7) * scaleY]
+                    ];
+                    ctx.beginPath();
+                    ctx.moveTo(pts[0][0], pts[0][1]);
+                    ctx.lineTo(pts[1][0], pts[1][1]);
+                    ctx.lineTo(pts[2][0], pts[2][1]);
+                    ctx.closePath();
+                    ctx.fill();
+                }
+
+                // Update HUD
+                document.getElementById('score').textContent = state.score;
+                document.getElementById('deadMsg').style.display = state.player_dead ? 'block' : 'none';
+                if (state.player_dead) {
+                    document.getElementById('restartBtn').style.display = 'block';
+                }
+
+                requestAnimationFrame(gameLoop);
+            }
+
+            gameLoop();
+        }
+
+        main().catch(err => {
+            document.getElementById('loading').innerHTML = 'Error: ' + err.message;
+        });
+    </script>
+</body>
+</html>
