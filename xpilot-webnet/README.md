@@ -123,6 +123,52 @@ echo -n '{"type":"state","id":"probe"}' > /dev/udp/SERVER_IP/50000
 
 If you'd like, I can make the server default to `0.0.0.0` and add verbose logging or add a TCP health-check endpoint — tell me which you prefer.
 
+Web Multiplayer (see other players live)
+
+Both browser versions — `xpilot-web.html` (JavaScript) and
+`xpilot-pyodide.html` (Python via WebAssembly) — support a much
+larger 8000x6000 world with a zoomable camera and a minimap (top-left
+corner), plus optional live multiplayer: when other people open
+either page against the same relay server, you'll see their ships,
+names, and shots in real time. The two clients are protocol-
+compatible, so a JS-client player and a Pyodide-client player can be
+in the same game together.
+
+Browsers can't speak raw UDP (which is what `net_server.py` /
+`xpilot.py` use), so a separate relay is included for the web clients:
+
+```bash
+pip install -r requirements.txt
+python ws_server.py --host 0.0.0.0 --port 8765
+```
+
+Then serve the pages as usual:
+
+```bash
+python web-server.py --port 8000
+```
+
+Open `http://localhost:8000/xpilot-web.html` or
+`http://localhost:8000/xpilot-pyodide.html` in as many browser tabs /
+machines as you like, in any combination. Each tab auto-connects to
+`ws://<page host>:8765` on load — no extra setup needed as long as
+`ws_server.py` is running on the same host that served the page. If
+it can't connect, the game still works fine single-player; the status
+line in the top-right corner shows "Offline (single player)" vs
+"Connected".
+
+For LAN play: run `ws_server.py` on one machine with `--host 0.0.0.0`,
+then have other players open `http://<that machine's LAN IP>:8000/xpilot-web.html`
+(or the `-pyodide.html` page).
+
+Controls (unchanged), plus:
+
+- Mouse wheel / pinch: zoom in and out
+- `+` / `-` keys: zoom in and out
+- Minimap (top-left): shows the whole 8000x6000 world, all players'
+  positions, and a white rectangle marking your current camera view
+  and zoom level
+
 Web Versions (Browser-based)
 
 XPilot is also available in two web-based versions — no Python installation needed on the client!
@@ -141,10 +187,15 @@ python web-server.py --port 8000
 
 **Pyodide Version** (Python in WebAssembly):
 
-- Python runs directly in the browser
-- No server needed (works offline)
+- Python runs directly in the browser (game simulation — physics,
+  enemies, collisions — is real Python via Pyodide)
+- Requires internet access on first load to fetch the Pyodide runtime
+  from a CDN; not fully offline
 - Open: http://localhost:8000/xpilot-pyodide.html
-- Slightly slower but showcases Python on web
+- Slightly slower to start (Pyodide download/init) but otherwise has
+  full feature parity with the JavaScript version: the same
+  8000x6000 world, camera zoom, minimap, and live multiplayer over
+  `ws_server.py`
 
 Usage:
 
@@ -166,7 +217,7 @@ pkill -f "python.*web-server.py"
    - **JavaScript**: http://localhost:8000/xpilot-web.html
    - **Pyodide**: http://localhost:8000/xpilot-pyodide.html
 
-Both versions feature the same gameplay — rotate, thrust, shoot, and destroy enemies for points. The web versions are single-player only (no relay networking yet).
+Both versions feature the same gameplay — rotate, thrust, shoot, and destroy enemies for points — across a shared 8000x6000 world with camera zoom and a minimap. Both also support live multiplayer (see "Web Multiplayer" above) via `ws_server.py`; without it running, each falls back to single-player automatically.
 
 Mobile Support
 
