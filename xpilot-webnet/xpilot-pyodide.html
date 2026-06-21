@@ -18,7 +18,7 @@
         #gameContainer {
             position: relative;
             width: 100%;
-            max-width: 900px;
+            max-width: 800px;
             aspect-ratio: 4/3;
             background: #0c0c18;
             border: 2px solid #444;
@@ -34,19 +34,13 @@
         #info {
             position: absolute;
             top: 10px;
-            right: 10px;
+            left: 10px;
             color: #c8c8c8;
             font-size: 14px;
             font-family: monospace;
             z-index: 100;
             pointer-events: none;
-            text-align: right;
         }
-        #connStatus { font-size: 11px; }
-        #connStatus.connected { color: #7fdc8f; }
-        #connStatus.connecting { color: #e0c060; }
-        #connStatus.offline { color: #888; }
-        #connStatus.error { color: #e07070; }
         #deadMsg {
             position: absolute;
             top: 50%;
@@ -61,26 +55,6 @@
             z-index: 200;
             pointer-events: none;
             display: none;
-        }
-
-        #minimapWrap {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            z-index: 100;
-            pointer-events: none;
-            background: rgba(0,0,0,0.45);
-            border: 1px solid #555;
-            border-radius: 4px;
-            padding: 4px;
-        }
-        #minimap { display: block; border-radius: 2px; }
-        #minimapLabel {
-            font-family: monospace;
-            font-size: 10px;
-            color: #999;
-            text-align: center;
-            margin-top: 2px;
         }
 
         /* Mobile controls */
@@ -144,25 +118,16 @@
         @media (max-width: 480px) {
             #info { font-size: 12px; }
             .control-btn { width: 70px; font-size: 11px; }
-            #minimap { width: 100px !important; height: 75px !important; }
         }
     </style>
 </head>
 <body>
     <div id="loading">Loading Pyodide and Python runtime...</div>
-
+    
     <div id="gameContainer">
         <canvas id="gameCanvas"></canvas>
-
-        <div id="minimapWrap">
-            <canvas id="minimap" width="160" height="120" style="width:160px;height:120px;"></canvas>
-            <div id="minimapLabel">zoom <span id="zoomVal">1.0</span>x</div>
-        </div>
-
         <div id="info">
             <div>Score: <span id="score">0</span></div>
-            <div id="connStatus" class="offline">Offline (single player)</div>
-            <div id="playerCount"></div>
         </div>
         <div id="deadMsg">
             You Died<br>Press R to restart
@@ -179,24 +144,12 @@
 
     <script async src="https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js"></script>
     <script>
-        // ---------------------------------------------------------------
-        // World constants (kept in sync with xpilot-web.html)
-        // ---------------------------------------------------------------
-        const WORLD_W = 8000;
-        const WORLD_H = 6000;
-        const VIEW_W = 800;
-        const VIEW_H = 600;
-        const MIN_ZOOM = 0.4;
-        const MAX_ZOOM = 2.5;
-        let zoom = 1.0;
-
         async function main() {
             const canvas = document.getElementById('gameCanvas');
             const ctx = canvas.getContext('2d');
             const gameContainer = document.getElementById('gameContainer');
-            const minimap = document.getElementById('minimap');
-            const mctx = minimap.getContext('2d');
-
+            
+            // Set canvas size
             function setCanvasSize() {
                 const rect = gameContainer.getBoundingClientRect();
                 canvas.width = rect.width;
@@ -205,16 +158,13 @@
 
             // Load Pyodide
             let pyodide = await loadPyodide();
-
-            // Python game code: owns local simulation (player physics,
-            // bullets, enemies, collisions) over the full 8000x6000 world.
-            // Camera, zoom, minimap, rendering and networking are handled
-            // in JS, mirroring xpilot-web.html.
+            
+            // Python game code
             const pythonCode = `
 import math
 import random
 
-WORLD_W, WORLD_H = 8000, 6000
+WIDTH, HEIGHT = 800, 600
 
 class Player:
     def __init__(self, x, y):
@@ -233,29 +183,28 @@ class Player:
         self.vy *= 0.995
         self.x += self.vx * dt
         self.y += self.vy * dt
-        self.x %= WORLD_W
-        self.y %= WORLD_H
+        self.x %= WIDTH
+        self.y %= HEIGHT
 
 class Bullet:
-    def __init__(self, x, y, vx, vy, remote=False):
+    def __init__(self, x, y, vx, vy):
         self.x = x
         self.y = y
         self.vx = vx
         self.vy = vy
         self.life = 2.0
-        self.remote = remote
 
     def update(self, dt):
         self.x += self.vx * dt
         self.y += self.vy * dt
         self.life -= dt
-        self.x %= WORLD_W
-        self.y %= WORLD_H
+        self.x %= WIDTH
+        self.y %= HEIGHT
 
 class Enemy:
     def __init__(self):
-        self.x = random.uniform(0, WORLD_W)
-        self.y = random.uniform(0, WORLD_H)
+        self.x = random.uniform(0, WIDTH)
+        self.y = random.uniform(0, HEIGHT)
         ang = random.uniform(0, math.tau)
         self.vx = math.cos(ang) * random.uniform(20, 80)
         self.vy = math.sin(ang) * random.uniform(20, 80)
@@ -264,18 +213,17 @@ class Enemy:
     def update(self, dt):
         self.x += self.vx * dt
         self.y += self.vy * dt
-        self.x %= WORLD_W
-        self.y %= WORLD_H
+        self.x %= WIDTH
+        self.y %= HEIGHT
 
 def create_game_state():
     return {
-        'player': Player(WORLD_W / 2, WORLD_H / 2),
+        'player': Player(WIDTH // 2, HEIGHT // 2),
         'bullets': [],
-        'enemies': [Enemy() for _ in range(24)],
+        'enemies': [Enemy() for _ in range(6)],
         'score': 0,
         'shoot_cool': 0,
-        'keys': {},
-        'just_shot': None,
+        'keys': {}
     }
 
 game = create_game_state()
@@ -284,30 +232,14 @@ def reset_game():
     global game
     game = create_game_state()
 
-def respawn():
-    """Used for R-to-restart: keep the world, move player to a fresh spot."""
-    p = game['player']
-    p.x = random.uniform(0, WORLD_W)
-    p.y = random.uniform(0, WORLD_H)
-    p.vx = 0
-    p.vy = 0
-    p.dead = False
-    game['bullets'] = []
-    game['score'] = 0
-
 def set_key(key, pressed):
     game['keys'][key] = pressed
     if key == 'r' and pressed and game['player'].dead:
-        respawn()
-
-def add_remote_bullet(x, y, vx, vy):
-    """A shot fired by another player, relayed in over the network."""
-    game['bullets'].append(Bullet(x, y, vx, vy, remote=True))
+        reset_game()
 
 def update(dt):
     player = game['player']
-    game['just_shot'] = None
-
+    
     player.thrust = 0
     if game['keys'].get('up'): player.thrust = 200
     if game['keys'].get('left'): player.angle -= 3 * dt
@@ -322,7 +254,6 @@ def update(dt):
         bvx = player.vx + math.cos(player.angle) * speed
         bvy = player.vy + math.sin(player.angle) * speed
         game['bullets'].append(Bullet(bx, by, bvx, bvy))
-        game['just_shot'] = (bx, by, bvx, bvy)
 
     if not player.dead:
         player.update(dt)
@@ -350,8 +281,7 @@ def update(dt):
                     game['bullets'].remove(b)
                 except ValueError:
                     pass
-                if not b.remote:
-                    game['score'] += 10
+                game['score'] += 10
                 game['enemies'].append(Enemy())
                 break
 
@@ -360,14 +290,11 @@ def draw():
     return {
         'player_x': player.x,
         'player_y': player.y,
-        'player_vx': player.vx,
-        'player_vy': player.vy,
         'player_angle': player.angle,
         'player_dead': player.dead,
         'bullets': [[b.x, b.y] for b in game['bullets']],
         'enemies': [[e.x, e.y, e.r] for e in game['enemies']],
-        'score': game['score'],
-        'just_shot': list(game['just_shot']) if game['just_shot'] else None,
+        'score': game['score']
     }
 `;
 
@@ -384,51 +311,12 @@ def draw():
             const pyUpdate = pyodide.globals.get('update');
             const pyDraw = pyodide.globals.get('draw');
             const pySetKey = pyodide.globals.get('set_key');
-            const pyAddRemoteBullet = pyodide.globals.get('add_remote_bullet');
 
-            // -------------------------------------------------------
-            // Zoom controls: mouse wheel (desktop) + pinch (touch)
-            // -------------------------------------------------------
-            function setZoom(z) {
-                zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z));
-                document.getElementById('zoomVal').textContent = zoom.toFixed(1);
-            }
-            setZoom(1.0);
-
-            gameContainer.addEventListener('wheel', (e) => {
-                e.preventDefault();
-                setZoom(zoom - e.deltaY * 0.001);
-            }, { passive: false });
-
-            let pinchStartDist = null;
-            let pinchStartZoom = 1;
-            gameContainer.addEventListener('touchstart', (e) => {
-                if (e.touches.length === 2) {
-                    const dx = e.touches[0].clientX - e.touches[1].clientX;
-                    const dy = e.touches[0].clientY - e.touches[1].clientY;
-                    pinchStartDist = Math.hypot(dx, dy);
-                    pinchStartZoom = zoom;
-                }
-            }, { passive: true });
-            gameContainer.addEventListener('touchmove', (e) => {
-                if (e.touches.length === 2 && pinchStartDist) {
-                    const dx = e.touches[0].clientX - e.touches[1].clientX;
-                    const dy = e.touches[0].clientY - e.touches[1].clientY;
-                    const dist = Math.hypot(dx, dy);
-                    setZoom(pinchStartZoom * (dist / pinchStartDist));
-                }
-            }, { passive: true });
-            gameContainer.addEventListener('touchend', (e) => {
-                if (e.touches.length < 2) pinchStartDist = null;
-            });
-
-            // -------------------------------------------------------
             // Touch input
-            // -------------------------------------------------------
             const joystickEl = document.getElementById('joystick');
             let joystickTouch = null;
             let touch = { left: 0, right: 0, thrust: false, shoot: false };
-
+            
             joystickEl.addEventListener('touchstart', (e) => {
                 joystickTouch = e.touches[0];
                 updateJoystick(e.touches[0]);
@@ -450,7 +338,7 @@ def draw():
                 const dy = t.clientY - cy;
                 const dist = Math.hypot(dx, dy);
                 const maxDist = rect.width / 2;
-
+                
                 if (dist > maxDist * 0.3) {
                     const angle = Math.atan2(dy, dx);
                     touch.left = Math.cos(angle);
@@ -481,354 +369,81 @@ def draw():
 
             window.addEventListener('keydown', (e) => {
                 if (keyMap[e.key]) pySetKey(keyMap[e.key], true);
-                if (e.key === '+' || e.key === '=') setZoom(zoom + 0.1);
-                if (e.key === '-' || e.key === '_') setZoom(zoom - 0.1);
             });
 
             window.addEventListener('keyup', (e) => {
                 if (keyMap[e.key]) pySetKey(keyMap[e.key], false);
             });
 
-            // -------------------------------------------------------
-            // Networking (WebSocket multiplayer relay, same protocol
-            // and same default relay as xpilot-web.html / ws_server.py)
-            // -------------------------------------------------------
-            const MY_ID = 'p_' + Math.random().toString(36).slice(2, 10);
-            let myName = 'Pilot-' + MY_ID.slice(2, 6);
-            let remotePlayers = {}; // id -> { x, y, angle, dead, name, lastUpdate }
-            let ws = null;
-            let netState = 'offline';
-            const STATE_SEND_HZ = 15;
-            let stateSendAccum = 0;
-            const REMOTE_TIMEOUT = 8.0;
-
-            function setConnStatus(state, text) {
-                netState = state;
-                const el = document.getElementById('connStatus');
-                el.className = state;
-                el.textContent = text;
-            }
-
-            function wsUrlGuess() {
-                const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-                const host = location.hostname || 'localhost';
-                return `${proto}//${host}:8765`;
-            }
-
-            function connect(url) {
-                if (ws) { try { ws.close(); } catch (e) {} }
-                setConnStatus('connecting', 'Connecting...');
-                try {
-                    ws = new WebSocket(url);
-                } catch (e) {
-                    setConnStatus('error', 'Connection failed');
-                    return;
-                }
-
-                ws.onopen = () => {
-                    setConnStatus('connected', 'Connected');
-                    ws.send(JSON.stringify({ type: 'join', id: MY_ID, name: myName }));
-                };
-
-                ws.onmessage = (ev) => {
-                    let msg;
-                    try { msg = JSON.parse(ev.data); } catch (e) { return; }
-                    handleNetMessage(msg);
-                };
-
-                ws.onerror = () => { setConnStatus('error', 'Connection error'); };
-
-                ws.onclose = () => {
-                    if (netState !== 'error') setConnStatus('offline', 'Offline (single player)');
-                };
-            }
-
-            function handleNetMessage(msg) {
-                if (!msg || !msg.type) return;
-
-                if (msg.type === 'roster') {
-                    (msg.players || []).forEach(p => {
-                        if (p.id === MY_ID) return;
-                        upsertRemote(p.id, p.name, p.state);
-                    });
-                    updatePlayerCount();
-                    return;
-                }
-
-                if (msg.type === 'player_joined') {
-                    if (msg.id === MY_ID) return;
-                    if (!remotePlayers[msg.id]) {
-                        remotePlayers[msg.id] = {
-                            x: WORLD_W / 2, y: WORLD_H / 2, angle: 0,
-                            dead: false, name: msg.name || msg.id.slice(0, 6),
-                            lastUpdate: performance.now() / 1000
-                        };
-                    }
-                    updatePlayerCount();
-                    return;
-                }
-
-                if (msg.type === 'player_left') {
-                    delete remotePlayers[msg.id];
-                    updatePlayerCount();
-                    return;
-                }
-
-                if (msg.type === 'state') {
-                    if (msg.id === MY_ID) return;
-                    upsertRemote(msg.id, msg.name, msg);
-                    return;
-                }
-
-                if (msg.type === 'shoot') {
-                    if (msg.id === MY_ID) return;
-                    pyAddRemoteBullet(msg.x, msg.y, msg.vx, msg.vy);
-                    return;
-                }
-            }
-
-            function upsertRemote(id, name, state) {
-                if (!state) return;
-                const existed = !!remotePlayers[id];
-                remotePlayers[id] = {
-                    x: state.x, y: state.y, angle: state.angle || 0,
-                    dead: !!state.dead,
-                    name: name || (remotePlayers[id] && remotePlayers[id].name) || id.slice(0, 6),
-                    lastUpdate: performance.now() / 1000
-                };
-                if (!existed) updatePlayerCount();
-            }
-
-            function updatePlayerCount() {
-                const n = Object.keys(remotePlayers).length;
-                document.getElementById('playerCount').textContent =
-                    n > 0 ? `${n} other pilot${n === 1 ? '' : 's'} online` : '';
-            }
-
-            function pruneStaleRemotes() {
-                const now = performance.now() / 1000;
-                let changed = false;
-                for (const id in remotePlayers) {
-                    if (now - remotePlayers[id].lastUpdate > REMOTE_TIMEOUT) {
-                        delete remotePlayers[id];
-                        changed = true;
-                    }
-                }
-                if (changed) updatePlayerCount();
-            }
-
-            function sendState(dt, state) {
-                if (!ws || ws.readyState !== WebSocket.OPEN) return;
-                stateSendAccum += dt;
-                if (stateSendAccum < 1 / STATE_SEND_HZ) return;
-                stateSendAccum = 0;
-                ws.send(JSON.stringify({
-                    type: 'state', id: MY_ID, name: myName,
-                    x: state.player_x, y: state.player_y, angle: state.player_angle,
-                    vx: state.player_vx, vy: state.player_vy, dead: state.player_dead
-                }));
-            }
-
-            function sendShoot(justShot) {
-                if (!ws || ws.readyState !== WebSocket.OPEN) return;
-                if (!justShot) return;
-                const [bx, by, bvx, bvy] = justShot;
-                ws.send(JSON.stringify({ type: 'shoot', id: MY_ID, x: bx, y: by, vx: bvx, vy: bvy }));
-            }
-
-            connect(wsUrlGuess());
-
-            window.addEventListener('beforeunload', () => {
-                if (ws && ws.readyState === WebSocket.OPEN) {
-                    try { ws.send(JSON.stringify({ type: 'leave', id: MY_ID })); } catch (e) {}
-                }
-            });
-
-            // -------------------------------------------------------
-            // Render helpers (camera-aware, world wrap-around aware)
-            // -------------------------------------------------------
-            function drawShipAt(ctxRef, sx, sy, angle, scale, color) {
-                ctxRef.fillStyle = color;
-                const heading = [Math.cos(angle), Math.sin(angle)];
-                const right = [Math.cos(angle + 2.5), Math.sin(angle + 2.5)];
-                const left = [Math.cos(angle - 2.5), Math.sin(angle - 2.5)];
-                const pts = [
-                    [sx + heading[0] * scale, sy + heading[1] * scale],
-                    [sx + right[0] * scale * 0.7, sy + right[1] * scale * 0.7],
-                    [sx + left[0] * scale * 0.7, sy + left[1] * scale * 0.7]
-                ];
-                ctxRef.beginPath();
-                ctxRef.moveTo(pts[0][0], pts[0][1]);
-                ctxRef.lineTo(pts[1][0], pts[1][1]);
-                ctxRef.lineTo(pts[2][0], pts[2][1]);
-                ctxRef.closePath();
-                ctxRef.fill();
-            }
-
-            function wrapDelta(a, b, size) {
-                let d = b - a;
-                d = ((d % size) + size) % size;
-                if (d > size / 2) d -= size;
-                return d;
-            }
-
-            function drawWorldGrid(camX, camY, viewW, viewH, scaleX, scaleY) {
-                const spacing = 400;
-                ctx.strokeStyle = 'rgba(255,255,255,0.05)';
-                ctx.lineWidth = 1;
-
-                const left = camX - viewW / 2;
-                const top = camY - viewH / 2;
-                const startX = Math.floor(left / spacing) * spacing;
-                const startY = Math.floor(top / spacing) * spacing;
-
-                ctx.beginPath();
-                for (let wx = startX; wx <= left + viewW + spacing; wx += spacing) {
-                    const dx = wrapDelta(camX, wx, WORLD_W);
-                    const sx = (viewW / 2 + dx) * scaleX;
-                    ctx.moveTo(sx, 0);
-                    ctx.lineTo(sx, canvas.height);
-                }
-                for (let wy = startY; wy <= top + viewH + spacing; wy += spacing) {
-                    const dy = wrapDelta(camY, wy, WORLD_H);
-                    const sy = (viewH / 2 + dy) * scaleY;
-                    ctx.moveTo(0, sy);
-                    ctx.lineTo(canvas.width, sy);
-                }
-                ctx.stroke();
-            }
-
-            function drawMinimap(state, viewW, viewH) {
-                const mw = minimap.width, mh = minimap.height;
-                mctx.fillStyle = 'rgba(12,12,24,0.9)';
-                mctx.fillRect(0, 0, mw, mh);
-
-                const sx = mw / WORLD_W;
-                const sy = mh / WORLD_H;
-
-                mctx.fillStyle = 'rgba(200,120,120,0.6)';
-                for (const [ex, ey] of state.enemies) {
-                    mctx.fillRect(ex * sx - 1, ey * sy - 1, 2, 2);
-                }
-
-                mctx.fillStyle = '#7fdc8f';
-                for (const id in remotePlayers) {
-                    const rp = remotePlayers[id];
-                    if (rp.dead) continue;
-                    mctx.beginPath();
-                    mctx.arc(rp.x * sx, rp.y * sy, 2.5, 0, Math.PI * 2);
-                    mctx.fill();
-                }
-
-                if (!state.player_dead) {
-                    mctx.fillStyle = '#b4c8ff';
-                    mctx.beginPath();
-                    mctx.arc(state.player_x * sx, state.player_y * sy, 3, 0, Math.PI * 2);
-                    mctx.fill();
-                }
-
-                const vw = viewW * sx;
-                const vh = viewH * sy;
-                const vx = state.player_x * sx - vw / 2;
-                const vy = state.player_y * sy - vh / 2;
-                mctx.strokeStyle = 'rgba(255,255,255,0.7)';
-                mctx.lineWidth = 1;
-                mctx.strokeRect(vx, vy, vw, vh);
-
-                mctx.strokeStyle = 'rgba(255,255,255,0.2)';
-                mctx.strokeRect(0, 0, mw, mh);
-            }
-
-            // -------------------------------------------------------
             // Game loop
-            // -------------------------------------------------------
             let lastTime = Date.now();
             function gameLoop() {
                 const now = Date.now();
                 const dt = Math.min((now - lastTime) / 1000, 0.05);
                 lastTime = now;
 
-                // Handle touch input -> Python key state
-                pySetKey('left', touch.left < -0.5);
-                pySetKey('right', touch.left > 0.5);
-                pySetKey('up', touch.thrust);
-                pySetKey('space', touch.shoot);
+                // Handle touch input
+                if (touch.left < -0.5) pySetKey('left', true);
+                else pySetKey('left', false);
+                if (touch.left > 0.5) pySetKey('right', true);
+                else pySetKey('right', false);
+                if (touch.thrust) pySetKey('up', true);
+                else pySetKey('up', false);
+                if (touch.shoot) pySetKey('space', true);
+                else pySetKey('space', false);
 
-                // Update Python simulation, pull state back as a JS object
+                // Update and draw
                 pyUpdate(dt);
-                const state = pyDraw().toJs({ dict_converter: Object.fromEntries });
+                const state = pyDraw();
 
-                sendState(dt, state);
-                sendShoot(state.just_shot);
-                pruneStaleRemotes();
-
-                // Camera (centered on local player, scaled by zoom)
-                const viewW = VIEW_W / zoom;
-                const viewH = VIEW_H / zoom;
-                const camX = state.player_x;
-                const camY = state.player_y;
-
-                const scaleX = canvas.width / viewW;
-                const scaleY = canvas.height / viewH;
+                const scaleX = canvas.width / WIDTH;
+                const scaleY = canvas.height / HEIGHT;
 
                 ctx.fillStyle = '#0c0c18';
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-                drawWorldGrid(camX, camY, viewW, viewH, scaleX, scaleY);
-
-                const worldToScreen = (wx, wy) => {
-                    const dx = wrapDelta(camX, wx, WORLD_W);
-                    const dy = wrapDelta(camY, wy, WORLD_H);
-                    return [(viewW / 2 + dx) * scaleX, (viewH / 2 + dy) * scaleY];
-                };
-
-                // Enemies
+                // Draw enemies
                 ctx.fillStyle = '#c87878';
                 for (const [ex, ey, er] of state.enemies) {
-                    const [sx, sy] = worldToScreen(ex, ey);
-                    if (sx < -50 || sx > canvas.width + 50 || sy < -50 || sy > canvas.height + 50) continue;
                     ctx.beginPath();
-                    ctx.arc(sx, sy, er * scaleX, 0, Math.PI * 2);
+                    ctx.arc(ex * scaleX, ey * scaleY, er * scaleX, 0, Math.PI * 2);
                     ctx.fill();
                 }
 
-                // Bullets
+                // Draw bullets
                 ctx.fillStyle = '#fff078';
                 for (const [bx, by] of state.bullets) {
-                    const [sx, sy] = worldToScreen(bx, by);
-                    if (sx < -20 || sx > canvas.width + 20 || sy < -20 || sy > canvas.height + 20) continue;
                     ctx.beginPath();
-                    ctx.arc(sx, sy, 3 * scaleX, 0, Math.PI * 2);
+                    ctx.arc(bx * scaleX, by * scaleY, 3 * scaleX, 0, Math.PI * 2);
                     ctx.fill();
                 }
 
-                // Remote players
-                for (const id in remotePlayers) {
-                    const rp = remotePlayers[id];
-                    if (rp.dead) continue;
-                    const [sx, sy] = worldToScreen(rp.x, rp.y);
-                    if (sx < -40 || sx > canvas.width + 40 || sy < -40 || sy > canvas.height + 40) continue;
-                    drawShipAt(ctx, sx, sy, rp.angle, 12 * scaleX, '#7fdc8f');
-                    ctx.fillStyle = '#9fe0a8';
-                    ctx.font = '11px monospace';
-                    ctx.textAlign = 'center';
-                    ctx.fillText(rp.name || id.slice(0, 6), sx, sy - 18 * scaleX);
-                }
-
-                // Local player (always centered)
+                // Draw player
                 if (!state.player_dead) {
-                    const [sx, sy] = worldToScreen(state.player_x, state.player_y);
-                    drawShipAt(ctx, sx, sy, state.player_angle, 12 * scaleX, '#b4c8ff');
+                    ctx.fillStyle = '#b4c8ff';
+                    const heading = [Math.cos(state.player_angle), Math.sin(state.player_angle)];
+                    const right = [Math.cos(state.player_angle + 2.5), Math.sin(state.player_angle + 2.5)];
+                    const left = [Math.cos(state.player_angle - 2.5), Math.sin(state.player_angle - 2.5)];
+                    const scale = 12;
+                    const pts = [
+                        [(state.player_x + heading[0] * scale) * scaleX, (state.player_y + heading[1] * scale) * scaleY],
+                        [(state.player_x + right[0] * scale * 0.7) * scaleX, (state.player_y + right[1] * scale * 0.7) * scaleY],
+                        [(state.player_x + left[0] * scale * 0.7) * scaleX, (state.player_y + left[1] * scale * 0.7) * scaleY]
+                    ];
+                    ctx.beginPath();
+                    ctx.moveTo(pts[0][0], pts[0][1]);
+                    ctx.lineTo(pts[1][0], pts[1][1]);
+                    ctx.lineTo(pts[2][0], pts[2][1]);
+                    ctx.closePath();
+                    ctx.fill();
                 }
 
-                // HUD
+                // Update HUD
                 document.getElementById('score').textContent = state.score;
                 document.getElementById('deadMsg').style.display = state.player_dead ? 'block' : 'none';
                 if (state.player_dead) {
                     document.getElementById('restartBtn').style.display = 'block';
                 }
-
-                drawMinimap(state, viewW, viewH);
 
                 requestAnimationFrame(gameLoop);
             }
