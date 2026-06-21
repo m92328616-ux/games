@@ -151,7 +151,7 @@ Usage:
 1. Start the web server:
 
 ```bash
-python web-server.py --port 8000
+python web-server.py --port 8000 &
 ```
 
 2. Stop the web server with `Ctrl+C` in the terminal.
