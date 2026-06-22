@@ -17,7 +17,7 @@
         #gameContainer {
             position: relative;
             width: 100%;
-            max-width: 800px;
+            max-width: 900px;
             aspect-ratio: 4/3;
             background: #0c0c18;
             border: 2px solid #444;
@@ -26,90 +26,60 @@
         canvas { display: block; width: 100%; height: 100%; }
         #info {
             position: absolute;
-            top: 10px;
-            left: 10px;
+            top: 10px; right: 10px;
             color: #c8c8c8;
             font-size: 14px;
             font-family: monospace;
             z-index: 100;
             pointer-events: none;
+            text-align: right;
+            line-height: 1.6;
         }
         #deadMsg {
             position: absolute;
-            top: 50%;
-            left: 50%;
+            top: 50%; left: 50%;
             transform: translate(-50%, -50%);
-            color: #dcdcdc;
-            font-size: 18px;
-            text-align: center;
-            background: rgba(0,0,0,0.7);
-            padding: 20px;
-            border-radius: 5px;
-            z-index: 200;
-            pointer-events: none;
-            display: none;
+            color: #dcdcdc; font-size: 18px; text-align: center;
+            background: rgba(0,0,0,0.75);
+            padding: 20px; border-radius: 5px;
+            z-index: 200; pointer-events: none; display: none;
         }
-
-        /* Mobile controls */
+        #minimapWrap {
+            position: absolute;
+            top: 10px; left: 10px;
+            z-index: 100; pointer-events: none;
+            background: rgba(0,0,0,0.5);
+            border: 1px solid #555;
+            border-radius: 4px;
+            padding: 3px;
+        }
+        #minimap { display: block; border-radius: 2px; }
+        #minimapLabel {
+            font-family: monospace; font-size: 10px;
+            color: #888; text-align: center; margin-top: 2px;
+        }
         #controls {
             position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            height: 120px;
-            display: flex;
-            justify-content: space-between;
-            padding: 10px;
-            gap: 10px;
-            pointer-events: none;
+            bottom: 0; left: 0; right: 0; height: 120px;
+            display: flex; justify-content: space-between;
+            padding: 10px; gap: 10px; pointer-events: none;
         }
-
-        /* Left joystick area */
         .joystick-area {
-            width: 100px;
-            height: 100px;
+            width: 100px; height: 100px;
             background: rgba(100,100,150,0.3);
-            border: 2px solid #666;
-            border-radius: 50%;
-            pointer-events: auto;
-            position: relative;
-        }
-        .joystick-area canvas {
-            border-radius: 50%;
-        }
-
-        /* Right buttons area */
-        .buttons-area {
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
+            border: 2px solid #666; border-radius: 50%;
             pointer-events: auto;
         }
+        .buttons-area { display: flex; flex-direction: column; gap: 5px; pointer-events: auto; }
         .control-btn {
-            width: 90px;
-            height: 40px;
+            width: 90px; height: 40px;
             background: rgba(100,150,100,0.3);
-            border: 2px solid #666;
-            color: #aaa;
-            font-size: 12px;
-            border-radius: 5px;
-            touch-action: none;
-            user-select: none;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            border: 2px solid #666; color: #aaa;
+            font-size: 12px; border-radius: 5px;
+            touch-action: none; user-select: none;
+            display: flex; align-items: center; justify-content: center;
         }
-        .control-btn.active {
-            background: rgba(100,200,100,0.5);
-            color: #fff;
-        }
-        .control-btn.shoot {
-            flex: 1;
-            width: 90px;
-            height: auto;
-            min-height: 50px;
-        }
-
+        .control-btn.shoot { flex: 1; width: 90px; height: auto; min-height: 50px; }
         @media (max-width: 480px) {
             #info { font-size: 12px; }
             .control-btn { width: 70px; font-size: 11px; }
@@ -117,303 +87,445 @@
     </style>
 </head>
 <body>
-    <div id="gameContainer">
-        <canvas id="gameCanvas"></canvas>
-        <div id="info">
-            <div>Score: <span id="score">0</span></div>
-        </div>
-        <div id="deadMsg">
-            You Died<br>Press R to restart
-        </div>
-        <div id="controls">
-            <div class="joystick-area" id="joystick"></div>
-            <div class="buttons-area">
-                <button class="control-btn" id="thrustBtn">Thrust</button>
-                <button class="control-btn shoot" id="shootBtn">SHOOT</button>
-                <button class="control-btn" id="restartBtn" style="display:none;">Restart</button>
-            </div>
-        </div>
+<div id="gameContainer">
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="minimapWrap">
+        <canvas id="minimap" width="150" height="113"></canvas>
+        <div id="minimapLabel">minimap</div>
     </div>
 
-    <script>
-        const WIDTH = 800;
-        const HEIGHT = 600;
-        const FPS = 60;
+    <div id="info">
+        Score: <span id="score">0</span><br>
+        <span style="color:#c87878">● circle</span> 10pts&nbsp;
+        <span style="color:#f0a050">▲ shooter</span> 20pts&nbsp;
+        <span style="color:#b07fe0">■ tank</span> 50pts
+    </div>
 
-        const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d');
-        const gameContainer = document.getElementById('gameContainer');
-        
-        // Set canvas size
-        function setCanvasSize() {
-            const rect = gameContainer.getBoundingClientRect();
-            canvas.width = rect.width;
-            canvas.height = rect.height;
-        }
-        setCanvasSize();
-        window.addEventListener('resize', setCanvasSize);
+    <div id="deadMsg">You Died<br>Press R to restart</div>
 
-        // Game state
-        let player = {
-            x: WIDTH / 2,
-            y: HEIGHT / 2,
-            vx: 0,
-            vy: 0,
-            angle: 0,
-            thrust: 0,
-            dead: false
+    <div id="controls">
+        <div class="joystick-area" id="joystick"></div>
+        <div class="buttons-area">
+            <button class="control-btn" id="thrustBtn">Thrust</button>
+            <button class="control-btn shoot" id="shootBtn">SHOOT</button>
+            <button class="control-btn" id="restartBtn" style="display:none;">Restart</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const WORLD_W = 3200, WORLD_H = 2400;
+    const VIEW_W  = 800,  VIEW_H  = 600;
+
+    // Entity counts per type
+    const N_CIRCLES   = 14;  // dumb wanderers,  10 pts
+    const N_SHOOTERS  = 8;   // orange triangles, 20 pts, fire back slowly
+    const N_TANKS     = 5;   // purple squares,   50 pts, slow & chunky
+
+    const canvas = document.getElementById('gameCanvas');
+    const ctx    = canvas.getContext('2d');
+    const gc     = document.getElementById('gameContainer');
+    const mm     = document.getElementById('minimap');
+    const mctx   = mm.getContext('2d');
+
+    function resize() {
+        const r = gc.getBoundingClientRect();
+        canvas.width = r.width; canvas.height = r.height;
+    }
+    resize();
+    window.addEventListener('resize', resize);
+
+    function wrapDelta(a, b, size) {
+        let d = ((b - a) % size + size) % size;
+        if (d > size / 2) d -= size;
+        return d;
+    }
+
+    // ── Entity factories ──────────────────────────────────────────────────
+
+    function mkCircle() {
+        const ang = Math.random() * Math.PI * 2;
+        return {
+            kind: 'circle',
+            x: Math.random() * WORLD_W, y: Math.random() * WORLD_H,
+            vx: Math.cos(ang) * (20 + Math.random() * 60),
+            vy: Math.sin(ang) * (20 + Math.random() * 60),
+            r: 10 + Math.floor(Math.random() * 16),
+            pts: 10,
         };
+    }
 
-        let bullets = [];
-        let enemies = [];
-        let score = 0;
-        let shootCool = 0;
-        let keys = {};
-        let touch = { left: 0, right: 0, thrust: false, shoot: false };
+    function mkShooter() {
+        const ang = Math.random() * Math.PI * 2;
+        return {
+            kind: 'shooter',
+            x: Math.random() * WORLD_W, y: Math.random() * WORLD_H,
+            vx: Math.cos(ang) * (15 + Math.random() * 35),
+            vy: Math.sin(ang) * (15 + Math.random() * 35),
+            r: 13,
+            pts: 20,
+            angle: ang,          // facing direction (rotates toward player)
+            fireCool: 2 + Math.random() * 2,  // seconds until first shot
+        };
+    }
 
-        // Initialize enemies
-        function initEnemies() {
-            enemies = [];
-            for (let i = 0; i < 6; i++) {
-                enemies.push(createEnemy());
-            }
+    function mkTank() {
+        const ang = Math.random() * Math.PI * 2;
+        return {
+            kind: 'tank',
+            x: Math.random() * WORLD_W, y: Math.random() * WORLD_H,
+            vx: Math.cos(ang) * (8 + Math.random() * 12),
+            vy: Math.sin(ang) * (8 + Math.random() * 12),
+            r: 22 + Math.floor(Math.random() * 10),  // bigger hitbox
+            pts: 50,
+        };
+    }
+
+    // ── State ─────────────────────────────────────────────────────────────
+
+    let player, playerBullets, enemyBullets, entities, score, shootCool;
+    let keys = {}, touch = { left: 0, right: 0, thrust: false, shoot: false };
+
+    function initGame() {
+        player = { x: WORLD_W/2, y: WORLD_H/2, vx:0, vy:0, angle:0, thrust:0, dead:false };
+        playerBullets = [];
+        enemyBullets  = [];
+        score = 0;
+        shootCool = 0;
+        entities = [
+            ...Array.from({length: N_CIRCLES},  mkCircle),
+            ...Array.from({length: N_SHOOTERS}, mkShooter),
+            ...Array.from({length: N_TANKS},    mkTank),
+        ];
+    }
+
+    function restart() {
+        initGame();
+        document.getElementById('restartBtn').style.display = 'none';
+    }
+
+    // ── Input ─────────────────────────────────────────────────────────────
+
+    const joystickEl = document.getElementById('joystick');
+    joystickEl.addEventListener('touchstart', e => updateJoy(e.touches[0]));
+    joystickEl.addEventListener('touchmove',  e => updateJoy(e.touches[0]));
+    joystickEl.addEventListener('touchend',   () => { touch.left = touch.right = 0; });
+    function updateJoy(t) {
+        const r = joystickEl.getBoundingClientRect();
+        const dx = t.clientX - (r.left + r.width/2);
+        const dy = t.clientY - (r.top  + r.height/2);
+        if (Math.hypot(dx, dy) > r.width * 0.15) {
+            const a = Math.atan2(dy, dx);
+            touch.left = Math.cos(a); touch.right = Math.sin(a);
         }
+    }
+    document.getElementById('thrustBtn').addEventListener('touchstart', () => { touch.thrust = true; });
+    document.getElementById('thrustBtn').addEventListener('touchend',   () => { touch.thrust = false; });
+    document.getElementById('shootBtn').addEventListener('touchstart', e => { e.preventDefault(); touch.shoot = true; });
+    document.getElementById('shootBtn').addEventListener('touchend',   e => { e.preventDefault(); touch.shoot = false; });
+    document.getElementById('restartBtn').addEventListener('touchstart', () => { if (player.dead) restart(); });
+    window.addEventListener('keydown', e => {
+        keys[e.key] = true;
+        if ((e.key === 'r' || e.key === 'R') && player.dead) restart();
+    });
+    window.addEventListener('keyup', e => { keys[e.key] = false; });
 
-        function createEnemy() {
-            const x = Math.random() * WIDTH;
-            const y = Math.random() * HEIGHT;
-            const angle = Math.random() * Math.PI * 2;
-            const speed = 20 + Math.random() * 60;
-            return {
-                x, y,
-                vx: Math.cos(angle) * speed,
-                vy: Math.sin(angle) * speed,
-                r: 10 + Math.floor(Math.random() * 16)
-            };
-        }
+    // ── Update ────────────────────────────────────────────────────────────
 
-        // Joystick input
-        const joystickEl = document.getElementById('joystick');
-        let joystickTouch = null;
-        
-        joystickEl.addEventListener('touchstart', (e) => {
-            joystickTouch = e.touches[0];
-            updateJoystick(e.touches[0]);
-        });
-        joystickEl.addEventListener('touchmove', (e) => {
-            if (joystickTouch) updateJoystick(e.touches[0]);
-        });
-        joystickEl.addEventListener('touchend', () => {
-            joystickTouch = null;
-            touch.left = 0;
-            touch.right = 0;
-        });
+    function wrapPos(obj) {
+        obj.x = ((obj.x % WORLD_W) + WORLD_W) % WORLD_W;
+        obj.y = ((obj.y % WORLD_H) + WORLD_H) % WORLD_H;
+    }
 
-        function updateJoystick(t) {
-            const rect = joystickEl.getBoundingClientRect();
-            const cx = rect.left + rect.width / 2;
-            const cy = rect.top + rect.height / 2;
-            const dx = t.clientX - cx;
-            const dy = t.clientY - cy;
-            const dist = Math.hypot(dx, dy);
-            const maxDist = rect.width / 2;
-            
-            if (dist > maxDist * 0.3) {
-                const angle = Math.atan2(dy, dx);
-                touch.left = Math.cos(angle);
-                touch.right = Math.sin(angle);
-            }
-        }
+    function update(dt) {
+        // — Player input —
+        player.thrust = 0;
+        if (keys['ArrowUp']  || keys['w'] || keys['W'] || touch.thrust)       player.thrust = 200;
+        if (keys['ArrowLeft']  || keys['a'] || keys['A'] || touch.left < -0.5) player.angle -= 3 * dt;
+        if (keys['ArrowRight'] || keys['d'] || keys['D'] || touch.left >  0.5) player.angle += 3 * dt;
 
-        // Button inputs
-        document.getElementById('thrustBtn').addEventListener('touchstart', () => {
-            touch.thrust = true;
-        });
-        document.getElementById('thrustBtn').addEventListener('touchend', () => {
-            touch.thrust = false;
-        });
-
-        document.getElementById('shootBtn').addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            touch.shoot = true;
-        });
-        document.getElementById('shootBtn').addEventListener('touchend', (e) => {
-            e.preventDefault();
-            touch.shoot = false;
-        });
-
-        document.getElementById('restartBtn').addEventListener('touchstart', () => {
-            if (player.dead) {
-                player.dead = false;
-                bullets = [];
-                initEnemies();
-                score = 0;
-                document.getElementById('restartBtn').style.display = 'none';
-            }
-        });
-
-        // Keyboard (for desktop testing)
-        window.addEventListener('keydown', (e) => {
-            keys[e.key] = true;
-            if (e.key === 'r' || e.key === 'R') {
-                if (player.dead) {
-                    player.dead = false;
-                    bullets = [];
-                    initEnemies();
-                    score = 0;
-                }
-            }
-        });
-        window.addEventListener('keyup', (e) => {
-            keys[e.key] = false;
-        });
-
-        // Update loop
-        function update(dt) {
-            // Input
-            player.thrust = 0;
-            if (keys['ArrowUp'] || keys['w'] || keys['W'] || touch.thrust) player.thrust = 200;
-            if (keys['ArrowLeft'] || keys['a'] || keys['A'] || touch.left < -0.5) player.angle -= 3 * dt;
-            if (keys['ArrowRight'] || keys['d'] || keys['D'] || touch.left > 0.5) player.angle += 3 * dt;
-
-            // Shooting
-            shootCool -= dt;
-            if ((keys[' '] || keys['Space'] || touch.shoot) && shootCool <= 0 && !player.dead) {
-                shootCool = 0.15;
-                const speed = 400;
-                const bx = player.x + Math.cos(player.angle) * 16;
-                const by = player.y + Math.sin(player.angle) * 16;
-                const bvx = player.vx + Math.cos(player.angle) * speed;
-                const bvy = player.vy + Math.sin(player.angle) * speed;
-                bullets.push({ x: bx, y: by, vx: bvx, vy: bvy, life: 2.0 });
-            }
-
-            // Player physics
-            if (!player.dead) {
-                player.vx += Math.cos(player.angle) * player.thrust * dt;
-                player.vy += Math.sin(player.angle) * player.thrust * dt;
-                player.vx *= 0.995;
-                player.vy *= 0.995;
-                player.x += player.vx * dt;
-                player.y += player.vy * dt;
-                player.x = ((player.x % WIDTH) + WIDTH) % WIDTH;
-                player.y = ((player.y % HEIGHT) + HEIGHT) % HEIGHT;
-            }
-
-            // Update bullets
-            bullets = bullets.filter(b => {
-                b.x += b.vx * dt;
-                b.y += b.vy * dt;
-                b.life -= dt;
-                b.x = ((b.x % WIDTH) + WIDTH) % WIDTH;
-                b.y = ((b.y % HEIGHT) + HEIGHT) % HEIGHT;
-                return b.life > 0;
+        shootCool -= dt;
+        if ((keys[' '] || keys['Space'] || touch.shoot) && shootCool <= 0 && !player.dead) {
+            shootCool = 0.15;
+            const sp = 400;
+            playerBullets.push({
+                x: player.x + Math.cos(player.angle) * 16,
+                y: player.y + Math.sin(player.angle) * 16,
+                vx: player.vx + Math.cos(player.angle) * sp,
+                vy: player.vy + Math.sin(player.angle) * sp,
+                life: 2.2,
             });
+        }
 
-            // Update enemies
-            enemies.forEach(e => {
-                e.x += e.vx * dt;
-                e.y += e.vy * dt;
-                e.x = ((e.x % WIDTH) + WIDTH) % WIDTH;
-                e.y = ((e.y % HEIGHT) + HEIGHT) % HEIGHT;
-            });
+        // — Player physics —
+        if (!player.dead) {
+            player.vx += Math.cos(player.angle) * player.thrust * dt;
+            player.vy += Math.sin(player.angle) * player.thrust * dt;
+            player.vx *= 0.995; player.vy *= 0.995;
+            player.x += player.vx * dt; player.y += player.vy * dt;
+            wrapPos(player);
+        }
 
-            // Collisions
-            if (!player.dead) {
-                for (let e of enemies) {
-                    const dist = Math.hypot(player.x - e.x, player.y - e.y);
-                    if (dist < e.r + 8) {
-                        player.dead = true;
-                        document.getElementById('restartBtn').style.display = 'block';
-                        break;
-                    }
-                }
-            }
+        // — Player bullets —
+        playerBullets = playerBullets.filter(b => {
+            b.x += b.vx * dt; b.y += b.vy * dt;
+            b.life -= dt; wrapPos(b);
+            return b.life > 0;
+        });
 
-            // Bullet-enemy collisions
-            for (let b of bullets) {
-                for (let i = 0; i < enemies.length; i++) {
-                    const e = enemies[i];
-                    const dist = Math.hypot(b.x - e.x, b.y - e.y);
-                    if (dist < e.r) {
-                        enemies.splice(i, 1);
-                        bullets = bullets.filter(x => x !== b);
-                        score += 10;
-                        enemies.push(createEnemy());
-                        break;
-                    }
+        // — Enemy bullets —
+        enemyBullets = enemyBullets.filter(b => {
+            b.x += b.vx * dt; b.y += b.vy * dt;
+            b.life -= dt; wrapPos(b);
+            return b.life > 0;
+        });
+
+        // — Entities —
+        for (const e of entities) {
+            e.x += e.vx * dt; e.y += e.vy * dt;
+            wrapPos(e);
+
+            if (e.kind === 'shooter') {
+                // Rotate slowly toward player
+                const tdx = wrapDelta(e.x, player.x, WORLD_W);
+                const tdy = wrapDelta(e.y, player.y, WORLD_H);
+                const targetAng = Math.atan2(tdy, tdx);
+                // Shortest-angle rotation
+                let da = targetAng - e.angle;
+                da = ((da + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
+                e.angle += Math.sign(da) * Math.min(Math.abs(da), 1.2 * dt);
+
+                // Fire slowly
+                e.fireCool -= dt;
+                if (e.fireCool <= 0 && !player.dead) {
+                    e.fireCool = 3 + Math.random() * 2;   // 3-5 s between shots
+                    const sp = 120;                         // slow bullet
+                    enemyBullets.push({
+                        x: e.x + Math.cos(e.angle) * (e.r + 4),
+                        y: e.y + Math.sin(e.angle) * (e.r + 4),
+                        vx: Math.cos(e.angle) * sp,
+                        vy: Math.sin(e.angle) * sp,
+                        life: 5,
+                    });
                 }
             }
         }
 
-        // Draw
-        function draw() {
-            const scaleX = canvas.width / WIDTH;
-            const scaleY = canvas.height / HEIGHT;
+        // — Player vs enemy body collision —
+        if (!player.dead) {
+            for (const e of entities) {
+                if (Math.hypot(player.x - e.x, player.y - e.y) < e.r + 8) {
+                    player.dead = true;
+                    document.getElementById('restartBtn').style.display = 'block';
+                    break;
+                }
+            }
+        }
 
-            ctx.fillStyle = '#0c0c18';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        // — Player vs enemy bullets —
+        if (!player.dead) {
+            for (const b of enemyBullets) {
+                if (Math.hypot(player.x - b.x, player.y - b.y) < 10) {
+                    player.dead = true;
+                    document.getElementById('restartBtn').style.display = 'block';
+                    break;
+                }
+            }
+        }
 
-            // Helper to draw scaled
-            const drawShip = (x, y, angle, scale, color) => {
-                ctx.fillStyle = color;
-                const heading = [Math.cos(angle), Math.sin(angle)];
-                const right = [Math.cos(angle + 2.5), Math.sin(angle + 2.5)];
-                const left = [Math.cos(angle - 2.5), Math.sin(angle - 2.5)];
-                const pts = [
-                    [(x + heading[0] * scale) * scaleX, (y + heading[1] * scale) * scaleY],
-                    [(x + right[0] * scale * 0.7) * scaleX, (y + right[1] * scale * 0.7) * scaleY],
-                    [(x + left[0] * scale * 0.7) * scaleX, (y + left[1] * scale * 0.7) * scaleY]
-                ];
+        // — Player bullets vs entities —
+        for (const b of playerBullets) {
+            for (let i = 0; i < entities.length; i++) {
+                const e = entities[i];
+                if (Math.hypot(b.x - e.x, b.y - e.y) < e.r) {
+                    score += e.pts;
+                    // Respawn same type
+                    const replacement = e.kind === 'circle'  ? mkCircle()
+                                      : e.kind === 'shooter' ? mkShooter()
+                                      :                        mkTank();
+                    entities.splice(i, 1, replacement);
+                    playerBullets = playerBullets.filter(x => x !== b);
+                    break;
+                }
+            }
+        }
+    }
+
+    // ── Draw ──────────────────────────────────────────────────────────────
+
+    function draw() {
+        const scx = canvas.width  / VIEW_W;
+        const scy = canvas.height / VIEW_H;
+        const camX = player.x, camY = player.y;
+
+        function w2s(wx, wy) {
+            return [
+                (VIEW_W/2 + wrapDelta(camX, wx, WORLD_W)) * scx,
+                (VIEW_H/2 + wrapDelta(camY, wy, WORLD_H)) * scy,
+            ];
+        }
+        function onScreen(sx, sy, pad=60) {
+            return sx > -pad && sx < canvas.width+pad && sy > -pad && sy < canvas.height+pad;
+        }
+
+        // Background
+        ctx.fillStyle = '#0c0c18';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Grid
+        ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        const gs = 400;
+        for (let gx = Math.floor((camX-VIEW_W/2)/gs)*gs; gx <= camX+VIEW_W/2+gs; gx += gs) {
+            const px = (VIEW_W/2 + wrapDelta(camX, gx, WORLD_W)) * scx;
+            ctx.moveTo(px, 0); ctx.lineTo(px, canvas.height);
+        }
+        for (let gy = Math.floor((camY-VIEW_H/2)/gs)*gs; gy <= camY+VIEW_H/2+gs; gy += gs) {
+            const py = (VIEW_H/2 + wrapDelta(camY, gy, WORLD_H)) * scy;
+            ctx.moveTo(0, py); ctx.lineTo(canvas.width, py);
+        }
+        ctx.stroke();
+
+        // ── Entities ──
+        for (const e of entities) {
+            const [ex, ey] = w2s(e.x, e.y);
+            if (!onScreen(ex, ey)) continue;
+
+            if (e.kind === 'circle') {
+                ctx.fillStyle = '#c87878';
                 ctx.beginPath();
-                ctx.moveTo(pts[0][0], pts[0][1]);
-                ctx.lineTo(pts[1][0], pts[1][1]);
-                ctx.lineTo(pts[2][0], pts[2][1]);
+                ctx.arc(ex, ey, e.r * scx, 0, Math.PI * 2);
+                ctx.fill();
+
+            } else if (e.kind === 'shooter') {
+                // Orange triangle, pointed in facing direction
+                ctx.fillStyle = '#f0a050';
+                ctx.strokeStyle = '#ffcc80';
+                ctx.lineWidth = 1;
+                const s = e.r * scx;
+                const h  = [Math.cos(e.angle),       Math.sin(e.angle)];
+                const r  = [Math.cos(e.angle + 2.3), Math.sin(e.angle + 2.3)];
+                const l  = [Math.cos(e.angle - 2.3), Math.sin(e.angle - 2.3)];
+                ctx.beginPath();
+                ctx.moveTo(ex + h[0]*s*1.2, ey + h[1]*s*1.2);
+                ctx.lineTo(ex + r[0]*s*0.9, ey + r[1]*s*0.9);
+                ctx.lineTo(ex + l[0]*s*0.9, ey + l[1]*s*0.9);
                 ctx.closePath();
                 ctx.fill();
-            };
+                ctx.stroke();
 
-            // Draw enemies
-            ctx.fillStyle = '#c87878';
-            enemies.forEach(e => {
-                ctx.beginPath();
-                ctx.arc(e.x * scaleX, e.y * scaleY, e.r * scaleX, 0, Math.PI * 2);
-                ctx.fill();
-            });
-
-            // Draw bullets
-            ctx.fillStyle = '#fff078';
-            bullets.forEach(b => {
-                ctx.beginPath();
-                ctx.arc(b.x * scaleX, b.y * scaleY, 3 * scaleX, 0, Math.PI * 2);
-                ctx.fill();
-            });
-
-            // Draw player
-            if (!player.dead) {
-                drawShip(player.x, player.y, player.angle, 12, '#b4c8ff');
+            } else if (e.kind === 'tank') {
+                // Purple square, slightly rotated for visual interest
+                ctx.fillStyle = '#9b59b6';
+                ctx.strokeStyle = '#c39bd3';
+                ctx.lineWidth = 1.5;
+                const s = e.r * scx;
+                ctx.save();
+                ctx.translate(ex, ey);
+                ctx.rotate(Math.PI / 4);   // 45° so it looks diamond-ish
+                ctx.fillRect(-s, -s, s*2, s*2);
+                ctx.strokeRect(-s, -s, s*2, s*2);
+                ctx.restore();
             }
-
-            // Update HUD
-            document.getElementById('score').textContent = score;
-            document.getElementById('deadMsg').style.display = player.dead ? 'block' : 'none';
         }
 
-        // Game loop
-        let lastTime = Date.now();
-        function gameLoop() {
-            const now = Date.now();
-            const dt = Math.min((now - lastTime) / 1000, 0.05);
-            lastTime = now;
-
-            update(dt);
-            draw();
-            requestAnimationFrame(gameLoop);
+        // ── Enemy bullets (red-orange, slightly larger than player bullets) ──
+        ctx.fillStyle = '#ff6040';
+        for (const b of enemyBullets) {
+            const [bx, by] = w2s(b.x, b.y);
+            if (!onScreen(bx, by, 20)) continue;
+            ctx.beginPath();
+            ctx.arc(bx, by, 4 * scx, 0, Math.PI * 2);
+            ctx.fill();
         }
 
-        // Start
-        initEnemies();
-        gameLoop();
-    </script>
+        // ── Player bullets ──
+        ctx.fillStyle = '#fff078';
+        for (const b of playerBullets) {
+            const [bx, by] = w2s(b.x, b.y);
+            ctx.beginPath();
+            ctx.arc(bx, by, 3 * scx, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // ── Player ship ──
+        if (!player.dead) {
+            const [px, py] = w2s(player.x, player.y);
+            ctx.fillStyle = '#b4c8ff';
+            const h = [Math.cos(player.angle), Math.sin(player.angle)];
+            const r = [Math.cos(player.angle+2.5), Math.sin(player.angle+2.5)];
+            const l = [Math.cos(player.angle-2.5), Math.sin(player.angle-2.5)];
+            const s = 12 * scx;
+            ctx.beginPath();
+            ctx.moveTo(px + h[0]*s,      py + h[1]*s);
+            ctx.lineTo(px + r[0]*s*0.7,  py + r[1]*s*0.7);
+            ctx.lineTo(px + l[0]*s*0.7,  py + l[1]*s*0.7);
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        // HUD
+        document.getElementById('score').textContent = score;
+        document.getElementById('deadMsg').style.display = player.dead ? 'block' : 'none';
+
+        drawMinimap();
+    }
+
+    function drawMinimap() {
+        const mw = mm.width, mh = mm.height;
+        const scx = mw / WORLD_W, scy = mh / WORLD_H;
+
+        mctx.fillStyle = 'rgba(10,10,20,0.92)';
+        mctx.fillRect(0, 0, mw, mh);
+
+        // Entities — colour-coded by type
+        for (const e of entities) {
+            const mx = e.x * scx, my = e.y * scy;
+            if (e.kind === 'circle') {
+                mctx.fillStyle = 'rgba(200,120,120,0.75)';
+                mctx.fillRect(mx-1, my-1, 2, 2);
+            } else if (e.kind === 'shooter') {
+                mctx.fillStyle = '#f0a050';
+                mctx.fillRect(mx-1, my-1, 3, 3);
+            } else {
+                mctx.fillStyle = '#b07fe0';
+                mctx.fillRect(mx-2, my-2, 4, 4);
+            }
+        }
+
+        // Player
+        if (!player.dead) {
+            mctx.fillStyle = '#b4c8ff';
+            mctx.beginPath();
+            mctx.arc(player.x * scx, player.y * scy, 3, 0, Math.PI * 2);
+            mctx.fill();
+        }
+
+        // Viewport rect
+        mctx.strokeStyle = 'rgba(255,255,255,0.65)';
+        mctx.lineWidth = 1;
+        mctx.strokeRect(
+            (player.x - VIEW_W/2) * scx,
+            (player.y - VIEW_H/2) * scy,
+            VIEW_W * scx, VIEW_H * scy
+        );
+        mctx.strokeStyle = 'rgba(255,255,255,0.18)';
+        mctx.strokeRect(0, 0, mw, mh);
+    }
+
+    // ── Loop ──────────────────────────────────────────────────────────────
+
+    let last = Date.now();
+    function loop() {
+        const now = Date.now(), dt = Math.min((now - last) / 1000, 0.05); last = now;
+        update(dt); draw();
+        requestAnimationFrame(loop);
+    }
+
+    initGame();
+    loop();
+</script>
 </body>
 </html>

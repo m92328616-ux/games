@@ -10,450 +10,427 @@
         body {
             font-family: Arial, sans-serif;
             background: #0c0c18;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            flex-direction: column;
+            display: flex; justify-content: center; align-items: center; flex-direction: column;
         }
         #gameContainer {
-            position: relative;
-            width: 100%;
-            max-width: 800px;
-            aspect-ratio: 4/3;
-            background: #0c0c18;
-            border: 2px solid #444;
-            touch-action: none;
-            display: none;
+            position: relative; width: 100%; max-width: 900px;
+            aspect-ratio: 4/3; background: #0c0c18;
+            border: 2px solid #444; touch-action: none; display: none;
         }
         canvas { display: block; width: 100%; height: 100%; }
-        #loading {
-            color: #c8c8c8;
-            text-align: center;
-            padding: 20px;
-        }
+        #loading { color: #c8c8c8; text-align: center; padding: 20px; }
         #info {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            color: #c8c8c8;
-            font-size: 14px;
-            font-family: monospace;
-            z-index: 100;
-            pointer-events: none;
+            position: absolute; top: 10px; right: 10px;
+            color: #c8c8c8; font-size: 14px; font-family: monospace;
+            z-index: 100; pointer-events: none; text-align: right; line-height: 1.6;
         }
         #deadMsg {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            color: #dcdcdc;
-            font-size: 18px;
-            text-align: center;
-            background: rgba(0,0,0,0.7);
-            padding: 20px;
-            border-radius: 5px;
-            z-index: 200;
-            pointer-events: none;
-            display: none;
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%,-50%);
+            color: #dcdcdc; font-size: 18px; text-align: center;
+            background: rgba(0,0,0,0.75); padding: 20px; border-radius: 5px;
+            z-index: 200; pointer-events: none; display: none;
         }
-
-        /* Mobile controls */
+        #minimapWrap {
+            position: absolute; top: 10px; left: 10px;
+            z-index: 100; pointer-events: none;
+            background: rgba(0,0,0,0.5); border: 1px solid #555;
+            border-radius: 4px; padding: 3px;
+        }
+        #minimap { display: block; border-radius: 2px; }
+        #minimapLabel { font-family: monospace; font-size: 10px; color: #888; text-align: center; margin-top: 2px; }
         #controls {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            height: 120px;
-            display: flex;
-            justify-content: space-between;
-            padding: 10px;
-            gap: 10px;
-            pointer-events: none;
+            position: absolute; bottom: 0; left: 0; right: 0; height: 120px;
+            display: flex; justify-content: space-between; padding: 10px; gap: 10px; pointer-events: none;
         }
-
         .joystick-area {
-            width: 100px;
-            height: 100px;
-            background: rgba(100,100,150,0.3);
-            border: 2px solid #666;
-            border-radius: 50%;
-            pointer-events: auto;
-            position: relative;
+            width: 100px; height: 100px; background: rgba(100,100,150,0.3);
+            border: 2px solid #666; border-radius: 50%; pointer-events: auto;
         }
-
-        .buttons-area {
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
-            pointer-events: auto;
-        }
-
+        .buttons-area { display: flex; flex-direction: column; gap: 5px; pointer-events: auto; }
         .control-btn {
-            width: 90px;
-            height: 40px;
-            background: rgba(100,150,100,0.3);
-            border: 2px solid #666;
-            color: #aaa;
-            font-size: 12px;
-            border-radius: 5px;
-            touch-action: none;
-            user-select: none;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            width: 90px; height: 40px; background: rgba(100,150,100,0.3);
+            border: 2px solid #666; color: #aaa; font-size: 12px; border-radius: 5px;
+            touch-action: none; user-select: none; display: flex; align-items: center; justify-content: center;
         }
-
-        .control-btn.active {
-            background: rgba(100,200,100,0.5);
-            color: #fff;
-        }
-
-        .control-btn.shoot {
-            flex: 1;
-            width: 90px;
-            height: auto;
-            min-height: 50px;
-        }
-
-        @media (max-width: 480px) {
-            #info { font-size: 12px; }
-            .control-btn { width: 70px; font-size: 11px; }
-        }
+        .control-btn.shoot { flex: 1; width: 90px; height: auto; min-height: 50px; }
+        @media (max-width: 480px) { #info { font-size: 12px; } .control-btn { width: 70px; font-size: 11px; } }
     </style>
 </head>
 <body>
-    <div id="loading">Loading Pyodide and Python runtime...</div>
-    
-    <div id="gameContainer">
-        <canvas id="gameCanvas"></canvas>
-        <div id="info">
-            <div>Score: <span id="score">0</span></div>
-        </div>
-        <div id="deadMsg">
-            You Died<br>Press R to restart
-        </div>
-        <div id="controls">
-            <div class="joystick-area" id="joystick"></div>
-            <div class="buttons-area">
-                <button class="control-btn" id="thrustBtn">Thrust</button>
-                <button class="control-btn shoot" id="shootBtn">SHOOT</button>
-                <button class="control-btn" id="restartBtn" style="display:none;">Restart</button>
-            </div>
+<div id="loading">Loading Pyodide and Python runtime...</div>
+<div id="gameContainer">
+    <canvas id="gameCanvas"></canvas>
+    <div id="minimapWrap">
+        <canvas id="minimap" width="150" height="113"></canvas>
+        <div id="minimapLabel">minimap</div>
+    </div>
+    <div id="info">
+        Score: <span id="score">0</span><br>
+        <span style="color:#c87878">● circle</span> 10pts&nbsp;
+        <span style="color:#f0a050">▲ shooter</span> 20pts&nbsp;
+        <span style="color:#b07fe0">■ tank</span> 50pts
+    </div>
+    <div id="deadMsg">You Died<br>Press R to restart</div>
+    <div id="controls">
+        <div class="joystick-area" id="joystick"></div>
+        <div class="buttons-area">
+            <button class="control-btn" id="thrustBtn">Thrust</button>
+            <button class="control-btn shoot" id="shootBtn">SHOOT</button>
+            <button class="control-btn" id="restartBtn" style="display:none;">Restart</button>
         </div>
     </div>
+</div>
 
-    <script async src="https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js"></script>
-    <script>
-        async function main() {
-            const canvas = document.getElementById('gameCanvas');
-            const ctx = canvas.getContext('2d');
-            const gameContainer = document.getElementById('gameContainer');
-            
-            // Set canvas size
-            function setCanvasSize() {
-                const rect = gameContainer.getBoundingClientRect();
-                canvas.width = rect.width;
-                canvas.height = rect.height;
-            }
+<script async src="https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js"></script>
+<script>
+async function main() {
+    const canvas = document.getElementById('gameCanvas');
+    const ctx    = canvas.getContext('2d');
+    const gc     = document.getElementById('gameContainer');
+    const mm     = document.getElementById('minimap');
+    const mctx   = mm.getContext('2d');
 
-            // Load Pyodide
-            let pyodide = await loadPyodide();
-            
-            // Python game code
-            const pythonCode = `
-import math
-import random
-
-WIDTH, HEIGHT = 800, 600
-
-class Player:
-    def __init__(self, x, y):
-        self.x = x
-        self.y = y
-        self.vx = 0
-        self.vy = 0
-        self.angle = 0
-        self.thrust = 0
-        self.dead = False
-
-    def update(self, dt):
-        self.vx += math.cos(self.angle) * self.thrust * dt
-        self.vy += math.sin(self.angle) * self.thrust * dt
-        self.vx *= 0.995
-        self.vy *= 0.995
-        self.x += self.vx * dt
-        self.y += self.vy * dt
-        self.x %= WIDTH
-        self.y %= HEIGHT
-
-class Bullet:
-    def __init__(self, x, y, vx, vy):
-        self.x = x
-        self.y = y
-        self.vx = vx
-        self.vy = vy
-        self.life = 2.0
-
-    def update(self, dt):
-        self.x += self.vx * dt
-        self.y += self.vy * dt
-        self.life -= dt
-        self.x %= WIDTH
-        self.y %= HEIGHT
-
-class Enemy:
-    def __init__(self):
-        self.x = random.uniform(0, WIDTH)
-        self.y = random.uniform(0, HEIGHT)
-        ang = random.uniform(0, math.tau)
-        self.vx = math.cos(ang) * random.uniform(20, 80)
-        self.vy = math.sin(ang) * random.uniform(20, 80)
-        self.r = random.randint(10, 26)
-
-    def update(self, dt):
-        self.x += self.vx * dt
-        self.y += self.vy * dt
-        self.x %= WIDTH
-        self.y %= HEIGHT
-
-def create_game_state():
-    return {
-        'player': Player(WIDTH // 2, HEIGHT // 2),
-        'bullets': [],
-        'enemies': [Enemy() for _ in range(6)],
-        'score': 0,
-        'shoot_cool': 0,
-        'keys': {}
+    function resize() {
+        const r = gc.getBoundingClientRect();
+        canvas.width = r.width; canvas.height = r.height;
     }
 
-game = create_game_state()
+    let pyodide = await loadPyodide();
+
+    const pythonCode = `
+import math, random
+
+WORLD_W, WORLD_H = 3200, 2400
+VIEW_W,  VIEW_H  = 800,  600
+N_CIRCLES  = 14
+N_SHOOTERS = 8
+N_TANKS    = 5
+
+def wrap(v, size): return v % size
+
+class Player:
+    def __init__(self):
+        self.x=WORLD_W/2; self.y=WORLD_H/2
+        self.vx=self.vy=self.angle=self.thrust=0
+        self.dead=False
+    def update(self, dt):
+        self.vx += math.cos(self.angle)*self.thrust*dt
+        self.vy += math.sin(self.angle)*self.thrust*dt
+        self.vx *= 0.995; self.vy *= 0.995
+        self.x = wrap(self.x + self.vx*dt, WORLD_W)
+        self.y = wrap(self.y + self.vy*dt, WORLD_H)
+
+class Bullet:
+    def __init__(self, x, y, vx, vy, life=2.2):
+        self.x=x; self.y=y; self.vx=vx; self.vy=vy; self.life=life
+    def update(self, dt):
+        self.x=wrap(self.x+self.vx*dt, WORLD_W)
+        self.y=wrap(self.y+self.vy*dt, WORLD_H)
+        self.life-=dt
+
+# ── Entity base & subtypes ────────────────────────────────────────────────
+
+class Circle:
+    kind='circle'; pts=10
+    def __init__(self):
+        a=random.uniform(0,math.tau); sp=random.uniform(20,80)
+        self.x=random.uniform(0,WORLD_W); self.y=random.uniform(0,WORLD_H)
+        self.vx=math.cos(a)*sp; self.vy=math.sin(a)*sp
+        self.r=random.randint(10,26)
+    def update(self, dt, player, enemy_bullets):
+        self.x=wrap(self.x+self.vx*dt,WORLD_W)
+        self.y=wrap(self.y+self.vy*dt,WORLD_H)
+    def spawn(): return Circle()
+
+class Shooter:
+    kind='shooter'; pts=20
+    def __init__(self):
+        a=random.uniform(0,math.tau); sp=random.uniform(15,35)
+        self.x=random.uniform(0,WORLD_W); self.y=random.uniform(0,WORLD_H)
+        self.vx=math.cos(a)*sp; self.vy=math.sin(a)*sp
+        self.r=13; self.angle=a
+        self.fire_cool=2+random.uniform(0,2)
+    def update(self, dt, player, enemy_bullets):
+        self.x=wrap(self.x+self.vx*dt,WORLD_W)
+        self.y=wrap(self.y+self.vy*dt,WORLD_H)
+        # rotate toward player (wrap-aware)
+        tdx = ((player.x-self.x)+WORLD_W/2)%WORLD_W - WORLD_W/2
+        tdy = ((player.y-self.y)+WORLD_H/2)%WORLD_H - WORLD_H/2
+        target = math.atan2(tdy,tdx)
+        da = (target-self.angle+math.pi)%(math.tau)-math.pi
+        self.angle += math.copysign(min(abs(da),1.2*dt),da)
+        # fire
+        self.fire_cool -= dt
+        if self.fire_cool<=0 and not player.dead:
+            self.fire_cool=3+random.uniform(0,2)
+            sp=120
+            enemy_bullets.append(Bullet(
+                self.x+math.cos(self.angle)*(self.r+4),
+                self.y+math.sin(self.angle)*(self.r+4),
+                math.cos(self.angle)*sp, math.sin(self.angle)*sp, life=5))
+    def spawn(): return Shooter()
+
+class Tank:
+    kind='tank'; pts=50
+    def __init__(self):
+        a=random.uniform(0,math.tau); sp=random.uniform(8,20)
+        self.x=random.uniform(0,WORLD_W); self.y=random.uniform(0,WORLD_H)
+        self.vx=math.cos(a)*sp; self.vy=math.sin(a)*sp
+        self.r=random.randint(22,32)
+    def update(self, dt, player, enemy_bullets):
+        self.x=wrap(self.x+self.vx*dt,WORLD_W)
+        self.y=wrap(self.y+self.vy*dt,WORLD_H)
+    def spawn(): return Tank()
+
+SPAWNERS = {'circle': Circle, 'shooter': Shooter, 'tank': Tank}
+
+def make_game():
+    return {
+        'player':  Player(),
+        'pbullets': [],
+        'ebullets': [],
+        'entities': (
+            [Circle()  for _ in range(N_CIRCLES)] +
+            [Shooter() for _ in range(N_SHOOTERS)] +
+            [Tank()    for _ in range(N_TANKS)]
+        ),
+        'score': 0, 'cool': 0, 'keys': {},
+    }
+
+game = make_game()
 
 def reset_game():
-    global game
-    game = create_game_state()
+    global game; game = make_game()
 
 def set_key(key, pressed):
-    game['keys'][key] = pressed
-    if key == 'r' and pressed and game['player'].dead:
-        reset_game()
+    game['keys'][key]=pressed
+    if key=='r' and pressed and game['player'].dead: reset_game()
 
 def update(dt):
-    player = game['player']
-    
-    player.thrust = 0
-    if game['keys'].get('up'): player.thrust = 200
-    if game['keys'].get('left'): player.angle -= 3 * dt
-    if game['keys'].get('right'): player.angle += 3 * dt
+    p=game['player']
+    p.thrust=0
+    if game['keys'].get('up'):    p.thrust=200
+    if game['keys'].get('left'):  p.angle -= 3*dt
+    if game['keys'].get('right'): p.angle += 3*dt
+    game['cool'] -= dt
+    if game['keys'].get('space') and game['cool']<=0 and not p.dead:
+        game['cool']=0.15; sp=400
+        game['pbullets'].append(Bullet(
+            p.x+math.cos(p.angle)*16, p.y+math.sin(p.angle)*16,
+            p.vx+math.cos(p.angle)*sp, p.vy+math.sin(p.angle)*sp))
+    if not p.dead: p.update(dt)
 
-    game['shoot_cool'] -= dt
-    if game['keys'].get('space') and game['shoot_cool'] <= 0 and not player.dead:
-        game['shoot_cool'] = 0.15
-        speed = 400
-        bx = player.x + math.cos(player.angle) * 16
-        by = player.y + math.sin(player.angle) * 16
-        bvx = player.vx + math.cos(player.angle) * speed
-        bvy = player.vy + math.sin(player.angle) * speed
-        game['bullets'].append(Bullet(bx, by, bvx, bvy))
-
-    if not player.dead:
-        player.update(dt)
-
-    for b in game['bullets'][:]:
+    for b in game['pbullets'][:]:
         b.update(dt)
-        if b.life <= 0:
-            game['bullets'].remove(b)
+        if b.life<=0: game['pbullets'].remove(b)
+    for b in game['ebullets'][:]:
+        b.update(dt)
+        if b.life<=0: game['ebullets'].remove(b)
 
-    for e in game['enemies']:
-        e.update(dt)
+    for e in game['entities']:
+        e.update(dt, p, game['ebullets'])
 
-    if not player.dead:
-        for e in game['enemies']:
-            dist = math.hypot(player.x - e.x, player.y - e.y)
-            if dist < e.r + 8:
-                player.dead = True
+    # Player vs entity body
+    if not p.dead:
+        for e in game['entities']:
+            if math.hypot(p.x-e.x,p.y-e.y)<e.r+8:
+                p.dead=True; break
 
-    for b in game['bullets'][:]:
-        for e in game['enemies'][:]:
-            dist = math.hypot(b.x - e.x, b.y - e.y)
-            if dist < e.r:
-                try:
-                    game['enemies'].remove(e)
-                    game['bullets'].remove(b)
-                except ValueError:
-                    pass
-                game['score'] += 10
-                game['enemies'].append(Enemy())
+    # Player vs enemy bullets
+    if not p.dead:
+        for b in game['ebullets']:
+            if math.hypot(p.x-b.x,p.y-b.y)<10:
+                p.dead=True; break
+
+    # Player bullets vs entities
+    for b in game['pbullets'][:]:
+        for i,e in enumerate(game['entities']):
+            if math.hypot(b.x-e.x,b.y-e.y)<e.r:
+                game['score']+=e.pts
+                game['entities'][i]=SPAWNERS[e.kind]()
+                try: game['pbullets'].remove(b)
+                except ValueError: pass
                 break
 
 def draw():
-    player = game['player']
+    p=game['player']
     return {
-        'player_x': player.x,
-        'player_y': player.y,
-        'player_angle': player.angle,
-        'player_dead': player.dead,
-        'bullets': [[b.x, b.y] for b in game['bullets']],
-        'enemies': [[e.x, e.y, e.r] for e in game['enemies']],
-        'score': game['score']
+        'px':p.x,'py':p.y,'pa':p.angle,'dead':p.dead,
+        'pbullets':[[b.x,b.y] for b in game['pbullets']],
+        'ebullets':[[b.x,b.y] for b in game['ebullets']],
+        'entities':[[e.x,e.y,e.r,e.kind,getattr(e,'angle',0.0)] for e in game['entities']],
+        'score':game['score'],
     }
 `;
 
-            // Run Python code
-            pyodide.runPython(pythonCode);
+    pyodide.runPython(pythonCode);
+    document.getElementById('loading').style.display='none';
+    document.getElementById('gameContainer').style.display='block';
+    resize();
+    window.addEventListener('resize', resize);
 
-            // Hide loading, show game
-            document.getElementById('loading').style.display = 'none';
-            document.getElementById('gameContainer').style.display = 'block';
-            setCanvasSize();
-            window.addEventListener('resize', setCanvasSize);
+    const pyUpdate = pyodide.globals.get('update');
+    const pyDraw   = pyodide.globals.get('draw');
+    const pySetKey = pyodide.globals.get('set_key');
 
-            // Get Python functions
-            const pyUpdate = pyodide.globals.get('update');
-            const pyDraw = pyodide.globals.get('draw');
-            const pySetKey = pyodide.globals.get('set_key');
+    // ── Input ─────────────────────────────────────────────────────────────
+    const joystickEl = document.getElementById('joystick');
+    let touch = { left:0, right:0, thrust:false, shoot:false };
 
-            // Touch input
-            const joystickEl = document.getElementById('joystick');
-            let joystickTouch = null;
-            let touch = { left: 0, right: 0, thrust: false, shoot: false };
-            
-            joystickEl.addEventListener('touchstart', (e) => {
-                joystickTouch = e.touches[0];
-                updateJoystick(e.touches[0]);
-            });
-            joystickEl.addEventListener('touchmove', (e) => {
-                if (joystickTouch) updateJoystick(e.touches[0]);
-            });
-            joystickEl.addEventListener('touchend', () => {
-                joystickTouch = null;
-                touch.left = 0;
-                touch.right = 0;
-            });
+    joystickEl.addEventListener('touchstart', e => updateJoy(e.touches[0]));
+    joystickEl.addEventListener('touchmove',  e => updateJoy(e.touches[0]));
+    joystickEl.addEventListener('touchend',   () => { touch.left=touch.right=0; });
+    function updateJoy(t) {
+        const r=joystickEl.getBoundingClientRect();
+        const dx=t.clientX-(r.left+r.width/2), dy=t.clientY-(r.top+r.height/2);
+        if (Math.hypot(dx,dy)>r.width*0.15) {
+            const a=Math.atan2(dy,dx); touch.left=Math.cos(a); touch.right=Math.sin(a);
+        }
+    }
+    document.getElementById('thrustBtn').addEventListener('touchstart',()=>{touch.thrust=true;});
+    document.getElementById('thrustBtn').addEventListener('touchend',  ()=>{touch.thrust=false;});
+    document.getElementById('shootBtn').addEventListener('touchstart', e=>{e.preventDefault();touch.shoot=true;});
+    document.getElementById('shootBtn').addEventListener('touchend',   e=>{e.preventDefault();touch.shoot=false;});
+    document.getElementById('restartBtn').addEventListener('touchstart',()=>{pySetKey('r',true);document.getElementById('restartBtn').style.display='none';});
 
-            function updateJoystick(t) {
-                const rect = joystickEl.getBoundingClientRect();
-                const cx = rect.left + rect.width / 2;
-                const cy = rect.top + rect.height / 2;
-                const dx = t.clientX - cx;
-                const dy = t.clientY - cy;
-                const dist = Math.hypot(dx, dy);
-                const maxDist = rect.width / 2;
-                
-                if (dist > maxDist * 0.3) {
-                    const angle = Math.atan2(dy, dx);
-                    touch.left = Math.cos(angle);
-                    touch.right = Math.sin(angle);
-                }
-            }
+    const keyMap = {
+        'ArrowUp':'up','w':'up','W':'up',
+        'ArrowLeft':'left','a':'left','A':'left',
+        'ArrowRight':'right','d':'right','D':'right',
+        ' ':'space','Space':'space','r':'r','R':'r'
+    };
+    window.addEventListener('keydown',e=>{if(keyMap[e.key]) pySetKey(keyMap[e.key],true);});
+    window.addEventListener('keyup',  e=>{if(keyMap[e.key]) pySetKey(keyMap[e.key],false);});
 
-            // Buttons
-            document.getElementById('thrustBtn').addEventListener('touchstart', () => { touch.thrust = true; });
-            document.getElementById('thrustBtn').addEventListener('touchend', () => { touch.thrust = false; });
+    // ── Helpers ───────────────────────────────────────────────────────────
+    function wrapDelta(a,b,size){let d=((b-a)%size+size)%size;if(d>size/2)d-=size;return d;}
 
-            document.getElementById('shootBtn').addEventListener('touchstart', (e) => { e.preventDefault(); touch.shoot = true; });
-            document.getElementById('shootBtn').addEventListener('touchend', (e) => { e.preventDefault(); touch.shoot = false; });
+    // ── Game loop ─────────────────────────────────────────────────────────
+    let last=Date.now();
+    function loop() {
+        const now=Date.now(), dt=Math.min((now-last)/1000,0.05); last=now;
 
-            document.getElementById('restartBtn').addEventListener('touchstart', () => {
-                pySetKey('r', true);
-                document.getElementById('restartBtn').style.display = 'none';
-            });
+        pySetKey('left',  touch.left<-0.5);
+        pySetKey('right', touch.left>0.5);
+        pySetKey('up',    touch.thrust);
+        pySetKey('space', touch.shoot);
 
-            // Keyboard
-            const keyMap = {
-                'ArrowUp': 'up', 'w': 'up', 'W': 'up',
-                'ArrowLeft': 'left', 'a': 'left', 'A': 'left',
-                'ArrowRight': 'right', 'd': 'right', 'D': 'right',
-                ' ': 'space', 'Space': 'space',
-                'r': 'r', 'R': 'r'
-            };
+        pyUpdate(dt);
+        const st = pyDraw().toJs({ dict_converter: Object.fromEntries });
 
-            window.addEventListener('keydown', (e) => {
-                if (keyMap[e.key]) pySetKey(keyMap[e.key], true);
-            });
+        const WORLD_W=3200, WORLD_H=2400, VIEW_W=800, VIEW_H=600;
+        const scx=canvas.width/VIEW_W, scy=canvas.height/VIEW_H;
+        const camX=st.px, camY=st.py;
 
-            window.addEventListener('keyup', (e) => {
-                if (keyMap[e.key]) pySetKey(keyMap[e.key], false);
-            });
-
-            // Game loop
-            let lastTime = Date.now();
-            function gameLoop() {
-                const now = Date.now();
-                const dt = Math.min((now - lastTime) / 1000, 0.05);
-                lastTime = now;
-
-                // Handle touch input
-                if (touch.left < -0.5) pySetKey('left', true);
-                else pySetKey('left', false);
-                if (touch.left > 0.5) pySetKey('right', true);
-                else pySetKey('right', false);
-                if (touch.thrust) pySetKey('up', true);
-                else pySetKey('up', false);
-                if (touch.shoot) pySetKey('space', true);
-                else pySetKey('space', false);
-
-                // Update and draw
-                pyUpdate(dt);
-                const state = pyDraw();
-
-                const scaleX = canvas.width / WIDTH;
-                const scaleY = canvas.height / HEIGHT;
-
-                ctx.fillStyle = '#0c0c18';
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-                // Draw enemies
-                ctx.fillStyle = '#c87878';
-                for (const [ex, ey, er] of state.enemies) {
-                    ctx.beginPath();
-                    ctx.arc(ex * scaleX, ey * scaleY, er * scaleX, 0, Math.PI * 2);
-                    ctx.fill();
-                }
-
-                // Draw bullets
-                ctx.fillStyle = '#fff078';
-                for (const [bx, by] of state.bullets) {
-                    ctx.beginPath();
-                    ctx.arc(bx * scaleX, by * scaleY, 3 * scaleX, 0, Math.PI * 2);
-                    ctx.fill();
-                }
-
-                // Draw player
-                if (!state.player_dead) {
-                    ctx.fillStyle = '#b4c8ff';
-                    const heading = [Math.cos(state.player_angle), Math.sin(state.player_angle)];
-                    const right = [Math.cos(state.player_angle + 2.5), Math.sin(state.player_angle + 2.5)];
-                    const left = [Math.cos(state.player_angle - 2.5), Math.sin(state.player_angle - 2.5)];
-                    const scale = 12;
-                    const pts = [
-                        [(state.player_x + heading[0] * scale) * scaleX, (state.player_y + heading[1] * scale) * scaleY],
-                        [(state.player_x + right[0] * scale * 0.7) * scaleX, (state.player_y + right[1] * scale * 0.7) * scaleY],
-                        [(state.player_x + left[0] * scale * 0.7) * scaleX, (state.player_y + left[1] * scale * 0.7) * scaleY]
-                    ];
-                    ctx.beginPath();
-                    ctx.moveTo(pts[0][0], pts[0][1]);
-                    ctx.lineTo(pts[1][0], pts[1][1]);
-                    ctx.lineTo(pts[2][0], pts[2][1]);
-                    ctx.closePath();
-                    ctx.fill();
-                }
-
-                // Update HUD
-                document.getElementById('score').textContent = state.score;
-                document.getElementById('deadMsg').style.display = state.player_dead ? 'block' : 'none';
-                if (state.player_dead) {
-                    document.getElementById('restartBtn').style.display = 'block';
-                }
-
-                requestAnimationFrame(gameLoop);
-            }
-
-            gameLoop();
+        function w2s(wx,wy){
+            return[(VIEW_W/2+wrapDelta(camX,wx,WORLD_W))*scx,
+                   (VIEW_H/2+wrapDelta(camY,wy,WORLD_H))*scy];
+        }
+        function onScreen(sx,sy,pad=60){
+            return sx>-pad&&sx<canvas.width+pad&&sy>-pad&&sy<canvas.height+pad;
         }
 
-        main().catch(err => {
-            document.getElementById('loading').innerHTML = 'Error: ' + err.message;
-        });
-    </script>
+        // Background
+        ctx.fillStyle='#0c0c18'; ctx.fillRect(0,0,canvas.width,canvas.height);
+
+        // Grid
+        ctx.strokeStyle='rgba(255,255,255,0.04)'; ctx.lineWidth=1; ctx.beginPath();
+        const gs=400;
+        for(let gx=Math.floor((camX-VIEW_W/2)/gs)*gs;gx<=camX+VIEW_W/2+gs;gx+=gs){
+            const px=(VIEW_W/2+wrapDelta(camX,gx,WORLD_W))*scx; ctx.moveTo(px,0); ctx.lineTo(px,canvas.height);
+        }
+        for(let gy=Math.floor((camY-VIEW_H/2)/gs)*gs;gy<=camY+VIEW_H/2+gs;gy+=gs){
+            const py=(VIEW_H/2+wrapDelta(camY,gy,WORLD_H))*scy; ctx.moveTo(0,py); ctx.lineTo(canvas.width,py);
+        }
+        ctx.stroke();
+
+        // Entities
+        for(const row of st.entities) { const [ex,ey,er,kind]=row;
+            const [sx,sy]=w2s(ex,ey);
+            if(!onScreen(sx,sy)) continue;
+            if(kind==='circle'){
+                ctx.fillStyle='#c87878';
+                ctx.beginPath(); ctx.arc(sx,sy,er*scx,0,Math.PI*2); ctx.fill();
+            } else if(kind==='shooter'){
+                ctx.fillStyle='#f0a050'; ctx.strokeStyle='#ffcc80'; ctx.lineWidth=1;
+                const s=er*scx;
+                const ang=row[4]||0;
+                const h=[Math.cos(ang),Math.sin(ang)];
+                const r=[Math.cos(ang+2.3),Math.sin(ang+2.3)];
+                const l=[Math.cos(ang-2.3),Math.sin(ang-2.3)];
+                ctx.beginPath();
+                ctx.moveTo(sx+h[0]*s*1.2,sy+h[1]*s*1.2);
+                ctx.lineTo(sx+r[0]*s*0.9,sy+r[1]*s*0.9);
+                ctx.lineTo(sx+l[0]*s*0.9,sy+l[1]*s*0.9);
+                ctx.closePath(); ctx.fill(); ctx.stroke();
+            } else {
+                ctx.fillStyle='#9b59b6'; ctx.strokeStyle='#c39bd3'; ctx.lineWidth=1.5;
+                const s=er*scx;
+                ctx.save(); ctx.translate(sx,sy); ctx.rotate(Math.PI/4);
+                ctx.fillRect(-s,-s,s*2,s*2); ctx.strokeRect(-s,-s,s*2,s*2);
+                ctx.restore();
+            }
+        }
+
+        // Enemy bullets
+        ctx.fillStyle='#ff6040';
+        for(const [bx,by] of st.ebullets){
+            const [sx,sy]=w2s(bx,by);
+            if(!onScreen(sx,sy,20)) continue;
+            ctx.beginPath(); ctx.arc(sx,sy,4*scx,0,Math.PI*2); ctx.fill();
+        }
+
+        // Player bullets
+        ctx.fillStyle='#fff078';
+        for(const [bx,by] of st.pbullets){
+            const [sx,sy]=w2s(bx,by);
+            ctx.beginPath(); ctx.arc(sx,sy,3*scx,0,Math.PI*2); ctx.fill();
+        }
+
+        // Player ship
+        if(!st.dead){
+            const [px,py]=w2s(st.px,st.py);
+            ctx.fillStyle='#b4c8ff';
+            const ang=st.pa; const s=12*scx;
+            const h=[Math.cos(ang),Math.sin(ang)];
+            const r=[Math.cos(ang+2.5),Math.sin(ang+2.5)];
+            const l=[Math.cos(ang-2.5),Math.sin(ang-2.5)];
+            ctx.beginPath();
+            ctx.moveTo(px+h[0]*s,py+h[1]*s);
+            ctx.lineTo(px+r[0]*s*0.7,py+r[1]*s*0.7);
+            ctx.lineTo(px+l[0]*s*0.7,py+l[1]*s*0.7);
+            ctx.closePath(); ctx.fill();
+        }
+
+        // HUD
+        document.getElementById('score').textContent=st.score;
+        document.getElementById('deadMsg').style.display=st.dead?'block':'none';
+        if(st.dead) document.getElementById('restartBtn').style.display='block';
+
+        // Minimap
+        const mw=mm.width, mh=mm.height;
+        const mmscx=mw/WORLD_W, mmscy=mh/WORLD_H;
+        mctx.fillStyle='rgba(10,10,20,0.92)'; mctx.fillRect(0,0,mw,mh);
+        for(const [ex,ey,,kind] of st.entities) {
+            const mx=ex*mmscx, my=ey*mmscy;
+            if(kind==='circle'){ mctx.fillStyle='rgba(200,120,120,0.75)'; mctx.fillRect(mx-1,my-1,2,2); }
+            else if(kind==='shooter'){ mctx.fillStyle='#f0a050'; mctx.fillRect(mx-1,my-1,3,3); }
+            else { mctx.fillStyle='#b07fe0'; mctx.fillRect(mx-2,my-2,4,4); }
+        }
+        if(!st.dead){
+            mctx.fillStyle='#b4c8ff'; mctx.beginPath();
+            mctx.arc(st.px*mmscx,st.py*mmscy,3,0,Math.PI*2); mctx.fill();
+        }
+        mctx.strokeStyle='rgba(255,255,255,0.65)'; mctx.lineWidth=1;
+        mctx.strokeRect((camX-VIEW_W/2)*mmscx,(camY-VIEW_H/2)*mmscy,VIEW_W*mmscx,VIEW_H*mmscy);
+        mctx.strokeStyle='rgba(255,255,255,0.18)'; mctx.strokeRect(0,0,mw,mh);
+
+        requestAnimationFrame(loop);
+    }
+    loop();
+}
+main().catch(err=>{ document.getElementById('loading').innerHTML='Error: '+err.message; });
+</script>
 </body>
 </html>
