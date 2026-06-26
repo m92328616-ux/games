@@ -154,15 +154,20 @@ class Shooter:
     def update(self, dt, player, enemy_bullets):
         self.x=wrap(self.x+self.vx*dt,WORLD_W)
         self.y=wrap(self.y+self.vy*dt,WORLD_H)
-        # rotate toward player (wrap-aware)
-        tdx = ((player.x-self.x)+WORLD_W/2)%WORLD_W - WORLD_W/2
-        tdy = ((player.y-self.y)+WORLD_H/2)%WORLD_H - WORLD_H/2
-        target = math.atan2(tdy,tdx)
-        da = (target-self.angle+math.pi)%(math.tau)-math.pi
-        self.angle += math.copysign(min(abs(da),1.2*dt),da)
-        # fire
+        # Only react to the player when within the visible viewport range
+        dx_abs = abs(((player.x-self.x)+WORLD_W/2)%WORLD_W - WORLD_W/2)
+        dy_abs = abs(((player.y-self.y)+WORLD_H/2)%WORLD_H - WORLD_H/2)
+        visible = dx_abs <= VIEW_W/2 and dy_abs <= VIEW_H/2
+        if visible:
+            # rotate toward player (wrap-aware)
+            tdx = ((player.x-self.x)+WORLD_W/2)%WORLD_W - WORLD_W/2
+            tdy = ((player.y-self.y)+WORLD_H/2)%WORLD_H - WORLD_H/2
+            target = math.atan2(tdy,tdx)
+            da = (target-self.angle+math.pi)%(math.tau)-math.pi
+            self.angle += math.copysign(min(abs(da),1.2*dt),da)
+        # cooldown always ticks; only fires when visible
         self.fire_cool -= dt
-        if self.fire_cool<=0 and not player.dead:
+        if self.fire_cool<=0 and visible and not player.dead:
             self.fire_cool=3+random.uniform(0,2)
             sp=120
             enemy_bullets.append(Bullet(

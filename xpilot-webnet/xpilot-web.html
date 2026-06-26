@@ -282,25 +282,36 @@
         });
 
         // — Entities —
+        // canSee: true when the entity is within the player's visible viewport.
+        // Uses wrap-aware deltas so entities near world edges work correctly.
+        const canSee = (e) => {
+            const dx = Math.abs(wrapDelta(e.x, player.x, WORLD_W));
+            const dy = Math.abs(wrapDelta(e.y, player.y, WORLD_H));
+            return dx <= VIEW_W / 2 && dy <= VIEW_H / 2;
+        };
+
         for (const e of entities) {
             e.x += e.vx * dt; e.y += e.vy * dt;
             wrapPos(e);
 
             if (e.kind === 'shooter') {
-                // Rotate slowly toward player
-                const tdx = wrapDelta(e.x, player.x, WORLD_W);
-                const tdy = wrapDelta(e.y, player.y, WORLD_H);
-                const targetAng = Math.atan2(tdy, tdx);
-                // Shortest-angle rotation
-                let da = targetAng - e.angle;
-                da = ((da + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
-                e.angle += Math.sign(da) * Math.min(Math.abs(da), 1.2 * dt);
+                const visible = canSee(e);
 
-                // Fire slowly
+                // Only aim at the player when visible
+                if (visible) {
+                    const tdx = wrapDelta(e.x, player.x, WORLD_W);
+                    const tdy = wrapDelta(e.y, player.y, WORLD_H);
+                    const targetAng = Math.atan2(tdy, tdx);
+                    let da = targetAng - e.angle;
+                    da = ((da + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
+                    e.angle += Math.sign(da) * Math.min(Math.abs(da), 1.2 * dt);
+                }
+
+                // Cooldown always ticks; only fires when visible
                 e.fireCool -= dt;
-                if (e.fireCool <= 0 && !player.dead) {
-                    e.fireCool = 3 + Math.random() * 2;   // 3-5 s between shots
-                    const sp = 120;                         // slow bullet
+                if (e.fireCool <= 0 && visible && !player.dead) {
+                    e.fireCool = 3 + Math.random() * 2;
+                    const sp = 120;
                     enemyBullets.push({
                         x: e.x + Math.cos(e.angle) * (e.r + 4),
                         y: e.y + Math.sin(e.angle) * (e.r + 4),
