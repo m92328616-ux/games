@@ -132,28 +132,32 @@ class Bullet:
 # ── Entity base & subtypes ────────────────────────────────────────────────
 
 class Circle:
-    kind='circle'; pts=10
+    kind='circle'; pts=10; max_hp=1
     def __init__(self):
         a=random.uniform(0,math.tau); sp=random.uniform(20,80)
         self.x=random.uniform(0,WORLD_W); self.y=random.uniform(0,WORLD_H)
         self.vx=math.cos(a)*sp; self.vy=math.sin(a)*sp
         self.r=random.randint(10,26)
+        self.hp=1; self.hit_flash=0.0
     def update(self, dt, player, enemy_bullets):
         self.x=wrap(self.x+self.vx*dt,WORLD_W)
         self.y=wrap(self.y+self.vy*dt,WORLD_H)
+        if self.hit_flash>0: self.hit_flash-=dt
     def spawn(): return Circle()
 
 class Shooter:
-    kind='shooter'; pts=20
+    kind='shooter'; pts=20; max_hp=2
     def __init__(self):
         a=random.uniform(0,math.tau); sp=random.uniform(15,35)
         self.x=random.uniform(0,WORLD_W); self.y=random.uniform(0,WORLD_H)
         self.vx=math.cos(a)*sp; self.vy=math.sin(a)*sp
         self.r=13; self.angle=a
         self.fire_cool=2+random.uniform(0,2)
+        self.hp=2; self.hit_flash=0.0
     def update(self, dt, player, enemy_bullets):
         self.x=wrap(self.x+self.vx*dt,WORLD_W)
         self.y=wrap(self.y+self.vy*dt,WORLD_H)
+        if self.hit_flash>0: self.hit_flash-=dt
         # Only react to the player when within the visible viewport range
         dx_abs = abs(((player.x-self.x)+WORLD_W/2)%WORLD_W - WORLD_W/2)
         dy_abs = abs(((player.y-self.y)+WORLD_H/2)%WORLD_H - WORLD_H/2)
@@ -177,15 +181,17 @@ class Shooter:
     def spawn(): return Shooter()
 
 class Tank:
-    kind='tank'; pts=50
+    kind='tank'; pts=50; max_hp=5
     def __init__(self):
         a=random.uniform(0,math.tau); sp=random.uniform(8,20)
         self.x=random.uniform(0,WORLD_W); self.y=random.uniform(0,WORLD_H)
         self.vx=math.cos(a)*sp; self.vy=math.sin(a)*sp
         self.r=random.randint(22,32)
+        self.hp=5; self.hit_flash=0.0
     def update(self, dt, player, enemy_bullets):
         self.x=wrap(self.x+self.vx*dt,WORLD_W)
         self.y=wrap(self.y+self.vy*dt,WORLD_H)
+        if self.hit_flash>0: self.hit_flash-=dt
     def spawn(): return Tank()
 
 SPAWNERS = {'circle': Circle, 'shooter': Shooter, 'tank': Tank}
@@ -248,14 +254,17 @@ def update(dt):
             if math.hypot(p.x-b.x,p.y-b.y)<10:
                 p.dead=True; break
 
-    # Player bullets vs entities
+    # Player bullets vs entities (hp-based damage)
     for b in game['pbullets'][:]:
         for i,e in enumerate(game['entities']):
             if math.hypot(b.x-e.x,b.y-e.y)<e.r:
-                game['score']+=e.pts
-                game['entities'][i]=SPAWNERS[e.kind]()
+                e.hp-=1
+                e.hit_flash=0.15
                 try: game['pbullets'].remove(b)
                 except ValueError: pass
+                if e.hp<=0:
+                    game['score']+=e.pts
+                    game['entities'][i]=SPAWNERS[e.kind]()
                 break
 
 def draw():
@@ -264,7 +273,7 @@ def draw():
         'px':p.x,'py':p.y,'pa':p.angle,'dead':p.dead,
         'pbullets':[[b.x,b.y] for b in game['pbullets']],
         'ebullets':[[b.x,b.y] for b in game['ebullets']],
-        'entities':[[e.x,e.y,e.r,e.kind,getattr(e,'angle',0.0)] for e in game['entities']],
+        'entities':[[e.x,e.y,e.r,e.kind,getattr(e,'angle',0.0),e.hp,e.max_hp,e.hit_flash] for e in game['entities']],
         'score':game['score'],
     }
 `;
@@ -351,30 +360,52 @@ def draw():
         ctx.stroke();
 
         // Entities
-        for(const row of st.entities) { const [ex,ey,er,kind]=row;
+        // row layout: [x, y, r, kind, angle, hp, maxHp, hitFlash]
+        for(const row of st.entities) {
+            const [ex,ey,er,kind,ang,hp,maxHp,hitFlash]=row;
             const [sx,sy]=w2s(ex,ey);
             if(!onScreen(sx,sy)) continue;
+
+            const fl = Math.min(1, Math.max(0, (hitFlash||0) / 0.15));
+            function flashColor(base) {
+                const r=parseInt(base.slice(1,3),16);
+                const g=parseInt(base.slice(3,5),16);
+                const b=parseInt(base.slice(5,7),16);
+                return `rgb(${Math.round(r+(255-r)*fl)},${Math.round(g+(255-g)*fl)},${Math.round(b+(255-b)*fl)})`;
+            }
+
             if(kind==='circle'){
-                ctx.fillStyle='#c87878';
+                ctx.fillStyle=flashColor('#c87878');
                 ctx.beginPath(); ctx.arc(sx,sy,er*scx,0,Math.PI*2); ctx.fill();
             } else if(kind==='shooter'){
-                ctx.fillStyle='#f0a050'; ctx.strokeStyle='#ffcc80'; ctx.lineWidth=1;
+                ctx.fillStyle=flashColor('#f0a050');
+                ctx.strokeStyle=fl>0.1?'#ffffff':'#ffcc80'; ctx.lineWidth=1;
                 const s=er*scx;
-                const ang=row[4]||0;
                 const h=[Math.cos(ang),Math.sin(ang)];
-                const r=[Math.cos(ang+2.3),Math.sin(ang+2.3)];
+                const rv=[Math.cos(ang+2.3),Math.sin(ang+2.3)];
                 const l=[Math.cos(ang-2.3),Math.sin(ang-2.3)];
                 ctx.beginPath();
                 ctx.moveTo(sx+h[0]*s*1.2,sy+h[1]*s*1.2);
-                ctx.lineTo(sx+r[0]*s*0.9,sy+r[1]*s*0.9);
+                ctx.lineTo(sx+rv[0]*s*0.9,sy+rv[1]*s*0.9);
                 ctx.lineTo(sx+l[0]*s*0.9,sy+l[1]*s*0.9);
                 ctx.closePath(); ctx.fill(); ctx.stroke();
             } else {
-                ctx.fillStyle='#9b59b6'; ctx.strokeStyle='#c39bd3'; ctx.lineWidth=1.5;
+                ctx.fillStyle=flashColor('#9b59b6');
+                ctx.strokeStyle=fl>0.1?'#ffffff':'#c39bd3'; ctx.lineWidth=1.5;
                 const s=er*scx;
                 ctx.save(); ctx.translate(sx,sy); ctx.rotate(Math.PI/4);
                 ctx.fillRect(-s,-s,s*2,s*2); ctx.strokeRect(-s,-s,s*2,s*2);
                 ctx.restore();
+            }
+
+            // Health bar (only when damaged and maxHp > 1)
+            if(maxHp>1 && hp<maxHp){
+                const barW=er*2*scx, barH=4*scx;
+                const bx=sx-barW/2, by=sy-er*scx-8*scx;
+                ctx.fillStyle='rgba(0,0,0,0.6)'; ctx.fillRect(bx,by,barW,barH);
+                const frac=hp/maxHp;
+                ctx.fillStyle=`hsl(${Math.round(frac*110)},80%,50%)`;
+                ctx.fillRect(bx,by,barW*frac,barH);
             }
         }
 
