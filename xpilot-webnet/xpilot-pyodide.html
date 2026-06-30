@@ -69,7 +69,9 @@
         Score: <span id="score">0</span><br>
         <span style="color:#c87878">● circle</span> 10pts&nbsp;
         <span style="color:#f0a050">▲ shooter</span> 20pts&nbsp;
-        <span style="color:#b07fe0">■ tank</span> 50pts
+        <span style="color:#b07fe0">■ tank</span> 50pts<br>
+        <span id="connStatus" style="color:#888">Offline (single player)</span>
+        <span id="playerCount"></span>
     </div>
     <div id="deadMsg">You Died<br>Press R to restart</div>
     <div id="controls">
@@ -206,7 +208,7 @@ def make_game():
             [Shooter() for _ in range(N_SHOOTERS)] +
             [Tank()    for _ in range(N_TANKS)]
         ),
-        'score': 0, 'cool': 0, 'keys': {},
+        'score': 0, 'cool': 0, 'keys': {}, 'just_shot': None,
     }
 
 game = make_game()
@@ -220,6 +222,7 @@ def set_key(key, pressed):
 
 def update(dt):
     p=game['player']
+    game['just_shot']=None
     p.thrust=0
     if game['keys'].get('up'):    p.thrust=200
     if game['keys'].get('left'):  p.angle -= 3*dt
@@ -227,9 +230,10 @@ def update(dt):
     game['cool'] -= dt
     if game['keys'].get('space') and game['cool']<=0 and not p.dead:
         game['cool']=0.15; sp=400
-        game['pbullets'].append(Bullet(
-            p.x+math.cos(p.angle)*16, p.y+math.sin(p.angle)*16,
-            p.vx+math.cos(p.angle)*sp, p.vy+math.sin(p.angle)*sp))
+        bx=p.x+math.cos(p.angle)*16; by=p.y+math.sin(p.angle)*16
+        bvx=p.vx+math.cos(p.angle)*sp; bvy=p.vy+math.sin(p.angle)*sp
+        game['pbullets'].append(Bullet(bx, by, bvx, bvy))
+        game['just_shot']=(bx, by, bvx, bvy)
     if not p.dead: p.update(dt)
 
     for b in game['pbullets'][:]:
@@ -271,10 +275,12 @@ def draw():
     p=game['player']
     return {
         'px':p.x,'py':p.y,'pa':p.angle,'dead':p.dead,
+        'pvx':p.vx,'pvy':p.vy,
         'pbullets':[[b.x,b.y] for b in game['pbullets']],
         'ebullets':[[b.x,b.y] for b in game['ebullets']],
         'entities':[[e.x,e.y,e.r,e.kind,getattr(e,'angle',0.0),e.hp,e.max_hp,e.hit_flash] for e in game['entities']],
         'score':game['score'],
+        'just_shot': list(game['just_shot']) if game['just_shot'] else None,
     }
 `;
 
@@ -317,6 +323,151 @@ def draw():
     window.addEventListener('keydown',e=>{if(keyMap[e.key]) pySetKey(keyMap[e.key],true);});
     window.addEventListener('keyup',  e=>{if(keyMap[e.key]) pySetKey(keyMap[e.key],false);});
 
+    // ── Multiplayer networking ───────────────────────────────────────────
+    const MY_ID = 'p_' + Math.random().toString(36).slice(2, 10);
+    let myName = 'Pilot-' + MY_ID.slice(2, 6);
+    let remotePlayers = {};   // id -> { x, y, angle, dead, name, lastUpdate }
+    let remoteBullets = [];   // bullets fired by other players (cosmetic only)
+    let ws = null;
+    let netState = 'offline';
+    const STATE_SEND_HZ = 15;
+    let stateSendAccum = 0;
+    const REMOTE_TIMEOUT = 8.0;
+
+    function setConnStatus(state, text) {
+        netState = state;
+        const el = document.getElementById('connStatus');
+        el.textContent = text;
+        el.style.color = state === 'connected'  ? '#7fdc8f'
+                        : state === 'connecting' ? '#e0c060'
+                        : state === 'error'      ? '#e07070'
+                        :                           '#888';
+    }
+
+    function wsUrlGuess() {
+        const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const host = location.hostname || 'localhost';
+        return `${proto}//${host}:8765`;
+    }
+
+    function connectMultiplayer(url) {
+        if (ws) { try { ws.close(); } catch (e) {} }
+        setConnStatus('connecting', 'Connecting...');
+        try {
+            ws = new WebSocket(url);
+        } catch (e) {
+            setConnStatus('error', 'Connection failed');
+            return;
+        }
+        ws.onopen = () => {
+            setConnStatus('connected', 'Connected');
+            ws.send(JSON.stringify({ type: 'join', id: MY_ID, name: myName }));
+        };
+        ws.onmessage = (ev) => {
+            let msg;
+            try { msg = JSON.parse(ev.data); } catch (e) { return; }
+            handleNetMessage(msg);
+        };
+        ws.onerror = () => { setConnStatus('error', 'Connection error'); };
+        ws.onclose = () => {
+            if (netState !== 'error') setConnStatus('offline', 'Offline (single player)');
+        };
+    }
+
+    function handleNetMessage(msg) {
+        if (!msg || !msg.type) return;
+        if (msg.type === 'roster') {
+            (msg.players || []).forEach(p => {
+                if (p.id === MY_ID) return;
+                upsertRemote(p.id, p.name, p.state);
+            });
+            updatePlayerCount();
+            return;
+        }
+        if (msg.type === 'player_joined') {
+            if (msg.id === MY_ID) return;
+            if (!remotePlayers[msg.id]) {
+                remotePlayers[msg.id] = {
+                    x: 1600, y: 1200, angle: 0, dead: false,
+                    name: msg.name || msg.id.slice(0, 6),
+                    lastUpdate: performance.now() / 1000,
+                };
+            }
+            updatePlayerCount();
+            return;
+        }
+        if (msg.type === 'player_left') {
+            delete remotePlayers[msg.id];
+            updatePlayerCount();
+            return;
+        }
+        if (msg.type === 'state') {
+            if (msg.id === MY_ID) return;
+            upsertRemote(msg.id, msg.name, msg);
+            return;
+        }
+        if (msg.type === 'shoot') {
+            if (msg.id === MY_ID) return;
+            remoteBullets.push({ x: msg.x, y: msg.y, vx: msg.vx, vy: msg.vy, life: 2.2 });
+            return;
+        }
+    }
+
+    function upsertRemote(id, name, state) {
+        if (!state) return;
+        const existed = !!remotePlayers[id];
+        remotePlayers[id] = {
+            x: state.x, y: state.y, angle: state.angle || 0,
+            dead: !!state.dead,
+            name: name || (remotePlayers[id] && remotePlayers[id].name) || id.slice(0, 6),
+            lastUpdate: performance.now() / 1000,
+        };
+        if (!existed) updatePlayerCount();
+    }
+
+    function updatePlayerCount() {
+        const n = Object.keys(remotePlayers).length;
+        document.getElementById('playerCount').textContent =
+            n > 0 ? ` · ${n} other pilot${n === 1 ? '' : 's'} online` : '';
+    }
+
+    function pruneStaleRemotes() {
+        const now = performance.now() / 1000;
+        let changed = false;
+        for (const id in remotePlayers) {
+            if (now - remotePlayers[id].lastUpdate > REMOTE_TIMEOUT) {
+                delete remotePlayers[id];
+                changed = true;
+            }
+        }
+        if (changed) updatePlayerCount();
+    }
+
+    function sendNetState(dt, st) {
+        if (!ws || ws.readyState !== WebSocket.OPEN) return;
+        stateSendAccum += dt;
+        if (stateSendAccum < 1 / STATE_SEND_HZ) return;
+        stateSendAccum = 0;
+        ws.send(JSON.stringify({
+            type: 'state', id: MY_ID, name: myName,
+            x: st.px, y: st.py, angle: st.pa,
+            vx: st.pvx, vy: st.pvy, dead: st.dead,
+        }));
+    }
+
+    function sendNetShoot(bx, by, bvx, bvy) {
+        if (!ws || ws.readyState !== WebSocket.OPEN) return;
+        ws.send(JSON.stringify({ type: 'shoot', id: MY_ID, x: bx, y: by, vx: bvx, vy: bvy }));
+    }
+
+    connectMultiplayer(wsUrlGuess());
+
+    window.addEventListener('beforeunload', () => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            try { ws.send(JSON.stringify({ type: 'leave', id: MY_ID })); } catch (e) {}
+        }
+    });
+
     // ── Helpers ───────────────────────────────────────────────────────────
     function wrapDelta(a,b,size){let d=((b-a)%size+size)%size;if(d>size/2)d-=size;return d;}
 
@@ -332,6 +483,13 @@ def draw():
 
         pyUpdate(dt);
         const st = pyDraw().toJs({ dict_converter: Object.fromEntries });
+
+        if (st.just_shot) {
+            const [bx, by, bvx, bvy] = st.just_shot;
+            sendNetShoot(bx, by, bvx, bvy);
+        }
+        sendNetState(dt, st);
+        pruneStaleRemotes();
 
         const WORLD_W=3200, WORLD_H=2400, VIEW_W=800, VIEW_H=600;
         const scx=canvas.width/VIEW_W, scy=canvas.height/VIEW_H;
@@ -424,6 +582,40 @@ def draw():
             ctx.beginPath(); ctx.arc(sx,sy,3*scx,0,Math.PI*2); ctx.fill();
         }
 
+        // Remote players' bullets (cosmetic; decay locally in JS)
+        remoteBullets = remoteBullets.filter(b => {
+            b.x = ((b.x + b.vx*dt) % WORLD_W + WORLD_W) % WORLD_W;
+            b.y = ((b.y + b.vy*dt) % WORLD_H + WORLD_H) % WORLD_H;
+            b.life -= dt;
+            return b.life > 0;
+        });
+        ctx.fillStyle='#90f0a0';
+        for (const b of remoteBullets) {
+            const [sx,sy]=w2s(b.x,b.y);
+            if(!onScreen(sx,sy,20)) continue;
+            ctx.beginPath(); ctx.arc(sx,sy,3*scx,0,Math.PI*2); ctx.fill();
+        }
+
+        // Remote players (other people in the same game)
+        for (const id in remotePlayers) {
+            const rp = remotePlayers[id];
+            if (rp.dead) continue;
+            const [rx,ry]=w2s(rp.x,rp.y);
+            if(!onScreen(rx,ry)) continue;
+            ctx.fillStyle='#7fdc8f';
+            const h=[Math.cos(rp.angle),Math.sin(rp.angle)];
+            const r=[Math.cos(rp.angle+2.5),Math.sin(rp.angle+2.5)];
+            const l=[Math.cos(rp.angle-2.5),Math.sin(rp.angle-2.5)];
+            const s=12*scx;
+            ctx.beginPath();
+            ctx.moveTo(rx+h[0]*s,ry+h[1]*s);
+            ctx.lineTo(rx+r[0]*s*0.7,ry+r[1]*s*0.7);
+            ctx.lineTo(rx+l[0]*s*0.7,ry+l[1]*s*0.7);
+            ctx.closePath(); ctx.fill();
+            ctx.fillStyle='#9fe0a8'; ctx.font='11px monospace'; ctx.textAlign='center';
+            ctx.fillText(rp.name || id.slice(0,6), rx, ry - 18*scx);
+        }
+
         // Player ship
         if(!st.dead){
             const [px,py]=w2s(st.px,st.py);
@@ -457,6 +649,14 @@ def draw():
         if(!st.dead){
             mctx.fillStyle='#b4c8ff'; mctx.beginPath();
             mctx.arc(st.px*mmscx,st.py*mmscy,3,0,Math.PI*2); mctx.fill();
+        }
+        mctx.fillStyle='#7fdc8f';
+        for (const id in remotePlayers) {
+            const rp = remotePlayers[id];
+            if (rp.dead) continue;
+            mctx.beginPath();
+            mctx.arc(rp.x*mmscx, rp.y*mmscy, 2.5, 0, Math.PI*2);
+            mctx.fill();
         }
         mctx.strokeStyle='rgba(255,255,255,0.65)'; mctx.lineWidth=1;
         mctx.strokeRect((camX-VIEW_W/2)*mmscx,(camY-VIEW_H/2)*mmscy,VIEW_W*mmscx,VIEW_H*mmscy);

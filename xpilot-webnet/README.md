@@ -1,189 +1,160 @@
-# XPilot (minimal) — Python
+# XPilot (minimal)
 
-Minimal XPilot-style top-down spaceship game implemented in Python using `pygame`.
+A minimal XPilot-style top-down spaceship game. Rotate, thrust, shoot, and
+destroy enemies for points. Three ways to play:
 
-Requirements:
+- **Desktop** (`xpilot.py`) — Python + `pygame`, multiplayer over UDP
+- **Web / JavaScript** (`xpilot-web.html`) — runs in any browser, multiplayer over WebSocket
+- **Web / Pyodide** (`xpilot-pyodide.html`) — same game, Python running in-browser via WebAssembly, multiplayer over WebSocket
 
-- Python 3.8+
-- `pygame` (see `requirements.txt`)
+Controls are the same everywhere: **Arrow keys / WASD** to rotate & thrust,
+**Space** to shoot, **R** to restart after death (Esc to quit on desktop).
+Web versions also have touch controls (joystick + buttons) for mobile.
 
-Run:
+Install dependencies first:
+
+```bash
+pip install -r requirements.txt
+```
+
+---
+
+## Desktop version
+
+Single player, no server needed:
 
 ```bash
 python xpilot.py
 ```
 
-Controls:
+### Multiplayer (LAN)
 
-- Arrow keys / WASD: rotate & thrust
-- Space: shoot
-- R: restart after death
-- Esc: quit
-
-Multiplayer (local network):
-
-- Run the relay server on a reachable host:
+**1. Start the relay server** — on whichever machine will host the game:
 
 ```bash
 python net_server.py --host 0.0.0.0 --port 50000
 ```
 
-- To stop the relay server, press `Ctrl+C` in the terminal where it is running.
-
-- If the server is running in the background or needs to be terminated from another shell, use:
-
-```bash
-pkill -f "python.*net_server.py"
-```
-
-- Start clients connecting to that server:
-
-```bash
-python xpilot.py --server SERVER_HOST --port 50000
-```
-
-Replace `SERVER_HOST` with the server IP or hostname.
-
-HTTP Status Endpoint
-
-The relay server includes an HTTP status endpoint for checking connectivity and active clients. It is enabled by default on port 8000.
-
-Start the server:
-
-```bash
-python net_server.py --host 0.0.0.0 --port 50000
-```
-
-If you want to change the HTTP port, pass `--http-port`:
-
-```bash
-python net_server.py --host 0.0.0.0 --port 50000 --http-port 8001
-```
-
-Query the status (from any machine):
+This also opens an HTTP status endpoint on port 8000 (`--http-port` to
+change it). From any machine on the network:
 
 ```bash
 curl http://SERVER_IP:8000/status
 ```
 
-Example response:
-
 ```json
-{
-  "clients": 2,
-  "list": [
-    {"ip": "192.168.1.100", "port": 51234},
-    {"ip": "192.168.1.101", "port": 51456}
-  ]
-}
+{"clients": 2, "list": [{"ip": "192.168.1.100", "port": 51234}, {"ip": "192.168.1.101", "port": 51456}]}
 ```
 
-Connection Troubleshooting
-
-If your client cannot reach the relay server, try the following checks and fixes:
-
-- Ensure the server is listening on all interfaces (bind to 0.0.0.0):
+**2. Connect clients** — on the host machine and on every friend's machine:
 
 ```bash
-python net_server.py --host 0.0.0.0 --port 50000
+python xpilot.py --server SERVER_IP --port 50000
 ```
 
-- Verify the server is listening on the UDP port (server machine):
+Replace `SERVER_IP` with the host's LAN IP (e.g. `192.168.1.100`) — or
+`localhost` if you're connecting from the same machine that's running the
+server.
+
+**Stopping the server:** `Ctrl+C` in its terminal, or from another shell:
 
 ```bash
-ss -lun | grep 50000
+pkill -f "python.*net_server.py"
 ```
 
-- From the client machine, send a quick UDP probe (replace SERVER_IP):
+**If a friend can't connect:**
+- Server must bind `0.0.0.0`, not `127.0.0.1` (see step 1 above)
+- Allow UDP through the firewall: `sudo ufw allow 50000/udp`
+- Behind a router/NAT, forward UDP port 50000 to the host machine
+- Confirm both machines are on the same network and using the host's actual LAN IP
+- Watch the server terminal for `Client joined: (ip, port)` — if it appears, the connection reached the server
+
+---
+
+## Web versions
+
+Browsers can't speak the desktop version's raw UDP protocol, so the web
+versions use a separate WebSocket relay (`ws_server.py`) and are served
+as a website by `web-server.py`. Both web clients (JavaScript and
+Pyodide) speak the same protocol, so people can mix and match — and
+both fall back to single-player automatically if no relay is reachable.
+
+### 1. Start the servers
 
 ```bash
-python - <<'PY'
-import socket, json
-s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
-s.sendto(json.dumps({'type':'state','id':'probe','x':10,'y':20}).encode(),('SERVER_IP',50000))
-print('probe sent')
-PY
+python ws_server.py --host 0.0.0.0 --port 8765    # multiplayer relay
+python web-server.py --host 0.0.0.0 --port 8000    # serves the website
 ```
 
-- Or (Bash):
+### 2. Open the game
 
-```bash
-echo -n '{"type":"state","id":"probe"}' > /dev/udp/SERVER_IP/50000
+**On the same machine (localhost):**
+
+```
+http://localhost:8000/xpilot-web.html
+http://localhost:8000/xpilot-pyodide.html
 ```
 
-- Check server terminal for a join message like `Client joined: (client_ip, client_port)` — if you see it, the packet arrived.
+**Friends on the same network (LAN):** have them open the host machine's
+LAN IP instead of `localhost`, e.g.:
 
-- If no join appears, common causes:
-	- Server bound to `127.0.0.1` only (use `--host 0.0.0.0`).
-	- Firewall blocking UDP 50000 (allow it, e.g. `sudo ufw allow 50000/udp`).
-	- Server behind NAT — forward UDP port 50000 from router to server.
-	- Wrong IP/hostname used on the client.
-
-- For LAN testing ensure both machines are on the same network and you use the server's LAN IP.
-
-If you'd like, I can make the server default to `0.0.0.0` and add verbose logging or add a TCP health-check endpoint — tell me which you prefer.
-
-Web Versions (Browser-based)
-
-XPilot is also available in two web-based versions — no Python installation needed on the client!
-
-**JavaScript Version** (recommended for web):
-
-- Fast, optimized for browser
-- Run via web server:
-
-```bash
-python web-server.py --port 8000
+```
+http://192.168.1.100:8000/xpilot-web.html
 ```
 
-- Open in browser: http://localhost:8000/xpilot-web.html
-- Same controls and gameplay as desktop version
+Find the host's LAN IP with `ipconfig` (Windows) or `ifconfig` /
+`ip addr` (Mac/Linux). Each page auto-connects to the relay on load — no
+extra setup needed once both servers are running. The in-game HUD shows
+"Connected · N other pilots online" once it works.
 
-**Pyodide Version** (Python in WebAssembly):
+**Friends outside your network (internet):** the host's router needs to
+forward TCP ports 8000 and 8765 to the host machine, and friends connect
+to the host's public IP instead of the LAN IP. For anything beyond quick
+testing, serving over HTTPS (below) is strongly recommended — plain HTTP
+across the open internet is unencrypted and many browsers/networks will
+flag or block it.
 
-- Python runs directly in the browser
-- No server needed (works offline)
-- Open: http://localhost:8000/xpilot-pyodide.html
-- Slightly slower but showcases Python on web
-
-Usage:
-
-1. Start the web server:
-
-```bash
-python web-server.py --port 8000 
-```
-
-2. Stop the web server with `Ctrl+C` in the terminal.
-
-   If the server needs to be terminated from another shell:
+**Stopping the servers:** `Ctrl+C` in each terminal, or:
 
 ```bash
 pkill -f "python.*web-server.py"
+pkill -f "python.*ws_server.py"
 ```
 
-3. Open a browser to:
-   - **JavaScript**: http://localhost:8000/xpilot-web.html
-   - **Pyodide**: http://localhost:8000/xpilot-pyodide.html
+### Serving over HTTPS
 
-Both versions feature the same gameplay — rotate, thrust, shoot, and destroy enemies for points. The web versions are single-player only (no relay networking yet).
+Recommended for anyone connecting from outside your LAN. Self-signed
+certs are auto-generated on first run — good enough for testing, but
+each visitor's browser will show a one-time "not private" warning they
+need to click through:
 
-Mobile Support
+```bash
+python web-server.py --host 0.0.0.0 --port 8443 --https
+```
 
-Both web versions are fully mobile-optimized with touch controls:
+```bash
+curl -k https://localhost:8443/status
+# -> {"status": "ok", "version": "web", "https": true, "port": 8443}
+```
 
-**Touch Controls (Mobile):**
+Friends then connect to `https://<host IP or domain>:8443/xpilot-web.html`.
 
-- **Left area (Joystick)**: Tilt left/right to rotate, up to thrust
-- **Right buttons**:
-  - Thrust: Hold to accelerate
-  - Shoot: Tap to fire
-  - Restart: Appears when dead
+For a public domain with no browser warning, use a real certificate
+(e.g. from [Let's Encrypt](https://letsencrypt.org/) via `certbot`):
 
-**Desktop Controls (Keyboard):**
+```bash
+python web-server.py --host 0.0.0.0 --port 443 --https --cert fullchain.pem --key privkey.pem
+```
 
-- Arrow keys / WASD: rotate & thrust
-- Space: shoot
-- R: restart
+Note: `ws_server.py` speaks plain `ws://`. If the page is loaded over
+`https://`, browsers will only allow it to open `wss://` connections —
+so for a fully-HTTPS public setup, put `ws_server.py` behind a reverse
+proxy (nginx or Caddy) that terminates TLS on `wss://` and forwards to
+`ws_server.py` on port 8765.
 
-Works on phones, tablets, and desktops. The canvas scales to fit any screen size.
+### Mobile
+
+Both web versions are touch-optimized: a joystick (left side) for
+rotate/thrust, and Thrust/Shoot/Restart buttons (right side). The canvas
+scales to fit any screen size — phones, tablets, and desktops all work
+from the same URL.

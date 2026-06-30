@@ -1,18 +1,67 @@
 """
-Simple HTTP web server for XPilot web versions.
-Serves HTML files and provides relay endpoints.
+HTTP(S) web server for XPilot web versions.
+Serves HTML files and a /status JSON endpoint.
 
-Usage:
+Plain HTTP:
     python web-server.py --port 8000
+
+HTTPS (self-signed cert auto-generated on first run if --cert/--key
+are not given -- fine for LAN play with friends; browsers will show a
+"not secure" warning to click through once per visitor):
+    python web-server.py --port 8443 --https
+
+HTTPS with your own certificate (e.g. from Let's Encrypt, for a real
+public domain):
+    python web-server.py --port 443 --https --cert fullchain.pem --key privkey.pem
+
+The /status endpoint reports whether this process is running over TLS,
+which is the simplest way to confirm "HTTPS status" for the site:
+    curl -k https://localhost:8443/status
+    -> {"status": "ok", "version": "web", "https": true, "port": 8443}
 """
 import http.server
 import socketserver
 import argparse
 import os
-from pathlib import Path
+import ssl
+import json
+import subprocess
+import sys
 
-PORT = 8000
 SERVE_DIR = os.path.dirname(__file__)
+HTTPS_ENABLED = False
+BOUND_PORT = None
+
+
+def ensure_self_signed_cert(cert_path, key_path):
+    """Generate a self-signed cert/key pair via OpenSSL if missing.
+
+    This is sufficient for friends-on-LAN play and for proving the
+    server can speak TLS. For a real public site (friends connecting
+    from anywhere over the internet, no browser warning), replace
+    these with a certificate from a CA such as Let's Encrypt.
+    """
+    if os.path.exists(cert_path) and os.path.exists(key_path):
+        return
+    print(f"No cert found at {cert_path} -- generating a self-signed one...")
+    try:
+        subprocess.run(
+            [
+                "openssl", "req", "-x509", "-newkey", "rsa:2048",
+                "-keyout", key_path, "-out", cert_path,
+                "-days", "365", "-nodes",
+                "-subj", "/CN=localhost",
+            ],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        print(f"Generated self-signed cert: {cert_path}, key: {key_path}")
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+        print(f"Could not generate a self-signed certificate automatically: {e}")
+        print("Install OpenSSL, or pass --cert/--key pointing to an existing cert.")
+        sys.exit(1)
+
 
 class GameHTTPHandler(http.server.SimpleHTTPRequestHandler):
     def translate_path(self, path):
@@ -28,7 +77,7 @@ class GameHTTPHandler(http.server.SimpleHTTPRequestHandler):
         """Handle GET requests."""
         if self.path == '/':
             self.path = '/xpilot-web.html'
-        
+
         if self.path in ['/xpilot-web.html', '/xpilot-pyodide.html']:
             file_path = os.path.join(SERVE_DIR, self.path.lstrip('/'))
             if os.path.exists(file_path):
@@ -39,35 +88,66 @@ class GameHTTPHandler(http.server.SimpleHTTPRequestHandler):
                 with open(file_path, 'rb') as f:
                     self.wfile.write(f.read())
                 return
-        
+
         if self.path == '/status':
             self.send_response(200)
             self.send_header('Content-type', 'application/json')
             self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
-            self.wfile.write(b'{"status": "ok", "version": "web"}')
+            payload = {
+                "status": "ok",
+                "version": "web",
+                "https": HTTPS_ENABLED,
+                "port": BOUND_PORT,
+            }
+            self.wfile.write(json.dumps(payload).encode('utf8'))
             return
-        
+
         super().do_GET()
 
     def log_message(self, format, *args):
         """Quiet logging."""
         pass
 
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='XPilot Web Server')
     parser.add_argument('--port', type=int, default=8000, help='Port to listen on')
     parser.add_argument('--host', default='0.0.0.0', help='Host to bind to')
+    parser.add_argument('--https', action='store_true', help='Serve over HTTPS (TLS)')
+    parser.add_argument('--cert', default=None, help='Path to TLS certificate (PEM). Auto-generated if omitted.')
+    parser.add_argument('--key', default=None, help='Path to TLS private key (PEM). Auto-generated if omitted.')
     args = parser.parse_args()
 
     os.chdir(SERVE_DIR)
-    
+
+    HTTPS_ENABLED = args.https
+    BOUND_PORT = args.port
+
     Handler = GameHTTPHandler
-    with socketserver.TCPServer((args.host, args.port), Handler) as httpd:
-        print(f'XPilot Web Server listening on {args.host}:{args.port}')
-        print(f'  → http://localhost:{args.port}/xpilot-web.html (JavaScript version)')
-        print(f'  → http://localhost:{args.port}/xpilot-pyodide.html (Python/Pyodide version)')
-        try:
-            httpd.serve_forever()
-        except KeyboardInterrupt:
-            print('Shutting down...')
+    httpd = socketserver.TCPServer((args.host, args.port), Handler)
+
+    scheme = 'http'
+    if args.https:
+        cert_path = args.cert or os.path.join(SERVE_DIR, 'cert.pem')
+        key_path = args.key or os.path.join(SERVE_DIR, 'key.pem')
+        ensure_self_signed_cert(cert_path, key_path)
+
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        ctx.load_cert_chain(certfile=cert_path, keyfile=key_path)
+        httpd.socket = ctx.wrap_socket(httpd.socket, server_side=True)
+        scheme = 'https'
+
+    print(f'XPilot Web Server listening on {args.host}:{args.port} ({scheme})')
+    print(f'  -> {scheme}://localhost:{args.port}/xpilot-web.html (JavaScript version)')
+    print(f'  -> {scheme}://localhost:{args.port}/xpilot-pyodide.html (Python/Pyodide version)')
+    print(f'  -> {scheme}://localhost:{args.port}/status (server status, JSON)')
+    if args.https:
+        print('  Note: self-signed certs trigger a browser warning ("not private") --')
+        print('  click "Advanced -> Proceed" once per browser/visitor, or supply a real')
+        print('  cert via --cert/--key for a public domain (e.g. Let\'s Encrypt).')
+
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        print('Shutting down...')

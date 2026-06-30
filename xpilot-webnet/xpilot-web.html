@@ -99,7 +99,9 @@
         Score: <span id="score">0</span><br>
         <span style="color:#c87878">● circle</span> 10pts&nbsp;
         <span style="color:#f0a050">▲ shooter</span> 20pts&nbsp;
-        <span style="color:#b07fe0">■ tank</span> 50pts
+        <span style="color:#b07fe0">■ tank</span> 50pts<br>
+        <span id="connStatus" style="color:#888">Offline (single player)</span>
+        <span id="playerCount"></span>
     </div>
 
     <div id="deadMsg">You Died<br>Press R to restart</div>
@@ -122,6 +124,17 @@
     const N_CIRCLES   = 14;  // dumb wanderers,  10 pts
     const N_SHOOTERS  = 8;   // orange triangles, 20 pts, fire back slowly
     const N_TANKS     = 5;   // purple squares,   50 pts, slow & chunky
+
+    // ── Multiplayer state ────────────────────────────────────────────────
+    const MY_ID = 'p_' + Math.random().toString(36).slice(2, 10);
+    let myName = 'Pilot-' + MY_ID.slice(2, 6);
+    let remotePlayers = {};   // id -> { x, y, angle, dead, name, lastUpdate }
+    let remoteBullets = [];   // bullets fired by other players
+    let ws = null;
+    let netState = 'offline'; // offline | connecting | connected | error
+    const STATE_SEND_HZ = 15;
+    let stateSendAccum = 0;
+    const REMOTE_TIMEOUT = 8.0;
 
     const canvas = document.getElementById('gameCanvas');
     const ctx    = canvas.getContext('2d');
@@ -205,6 +218,157 @@
         document.getElementById('restartBtn').style.display = 'none';
     }
 
+    // ── Networking ────────────────────────────────────────────────────────
+
+    function setConnStatus(state, text) {
+        netState = state;
+        const el = document.getElementById('connStatus');
+        el.textContent = text;
+        el.style.color = state === 'connected'  ? '#7fdc8f'
+                        : state === 'connecting' ? '#e0c060'
+                        : state === 'error'      ? '#e07070'
+                        :                           '#888';
+    }
+
+    function wsUrlGuess() {
+        // Default relay port for ws_server.py is 8765. Assume it runs on
+        // the same host that served this page (works for both plain HTTP
+        // and HTTPS — wss:// is used automatically when the page is
+        // loaded over https:).
+        const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const host = location.hostname || 'localhost';
+        return `${proto}//${host}:8765`;
+    }
+
+    function connectMultiplayer(url) {
+        if (ws) { try { ws.close(); } catch (e) {} }
+        setConnStatus('connecting', 'Connecting...');
+        try {
+            ws = new WebSocket(url);
+        } catch (e) {
+            setConnStatus('error', 'Connection failed');
+            return;
+        }
+
+        ws.onopen = () => {
+            setConnStatus('connected', 'Connected');
+            ws.send(JSON.stringify({ type: 'join', id: MY_ID, name: myName }));
+        };
+
+        ws.onmessage = (ev) => {
+            let msg;
+            try { msg = JSON.parse(ev.data); } catch (e) { return; }
+            handleNetMessage(msg);
+        };
+
+        ws.onerror = () => { setConnStatus('error', 'Connection error'); };
+
+        ws.onclose = () => {
+            if (netState !== 'error') setConnStatus('offline', 'Offline (single player)');
+        };
+    }
+
+    function handleNetMessage(msg) {
+        if (!msg || !msg.type) return;
+
+        if (msg.type === 'roster') {
+            (msg.players || []).forEach(p => {
+                if (p.id === MY_ID) return;
+                upsertRemote(p.id, p.name, p.state);
+            });
+            updatePlayerCount();
+            return;
+        }
+
+        if (msg.type === 'player_joined') {
+            if (msg.id === MY_ID) return;
+            if (!remotePlayers[msg.id]) {
+                remotePlayers[msg.id] = {
+                    x: WORLD_W / 2, y: WORLD_H / 2, angle: 0,
+                    dead: false, name: msg.name || msg.id.slice(0, 6),
+                    lastUpdate: performance.now() / 1000,
+                };
+            }
+            updatePlayerCount();
+            return;
+        }
+
+        if (msg.type === 'player_left') {
+            delete remotePlayers[msg.id];
+            updatePlayerCount();
+            return;
+        }
+
+        if (msg.type === 'state') {
+            if (msg.id === MY_ID) return;
+            upsertRemote(msg.id, msg.name, msg);
+            return;
+        }
+
+        if (msg.type === 'shoot') {
+            if (msg.id === MY_ID) return;
+            remoteBullets.push({ x: msg.x, y: msg.y, vx: msg.vx, vy: msg.vy, life: 2.2 });
+            return;
+        }
+    }
+
+    function upsertRemote(id, name, state) {
+        if (!state) return;
+        const existed = !!remotePlayers[id];
+        remotePlayers[id] = {
+            x: state.x, y: state.y, angle: state.angle || 0,
+            dead: !!state.dead,
+            name: name || (remotePlayers[id] && remotePlayers[id].name) || id.slice(0, 6),
+            lastUpdate: performance.now() / 1000,
+        };
+        if (!existed) updatePlayerCount();
+    }
+
+    function updatePlayerCount() {
+        const n = Object.keys(remotePlayers).length;
+        document.getElementById('playerCount').textContent =
+            n > 0 ? ` · ${n} other pilot${n === 1 ? '' : 's'} online` : '';
+    }
+
+    function pruneStaleRemotes() {
+        const now = performance.now() / 1000;
+        let changed = false;
+        for (const id in remotePlayers) {
+            if (now - remotePlayers[id].lastUpdate > REMOTE_TIMEOUT) {
+                delete remotePlayers[id];
+                changed = true;
+            }
+        }
+        if (changed) updatePlayerCount();
+    }
+
+    function sendNetState(dt) {
+        if (!ws || ws.readyState !== WebSocket.OPEN) return;
+        stateSendAccum += dt;
+        if (stateSendAccum < 1 / STATE_SEND_HZ) return;
+        stateSendAccum = 0;
+        ws.send(JSON.stringify({
+            type: 'state', id: MY_ID, name: myName,
+            x: player.x, y: player.y, angle: player.angle,
+            vx: player.vx, vy: player.vy, dead: player.dead,
+        }));
+    }
+
+    function sendNetShoot(b) {
+        if (!ws || ws.readyState !== WebSocket.OPEN) return;
+        ws.send(JSON.stringify({ type: 'shoot', id: MY_ID, x: b.x, y: b.y, vx: b.vx, vy: b.vy }));
+    }
+
+    // Try to connect automatically on load; falls back to single-player
+    // seamlessly if no relay (ws_server.py) is reachable.
+    connectMultiplayer(wsUrlGuess());
+
+    window.addEventListener('beforeunload', () => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            try { ws.send(JSON.stringify({ type: 'leave', id: MY_ID })); } catch (e) {}
+        }
+    });
+
     // ── Input ─────────────────────────────────────────────────────────────
 
     const joystickEl = document.getElementById('joystick');
@@ -249,13 +413,15 @@
         if ((keys[' '] || keys['Space'] || touch.shoot) && shootCool <= 0 && !player.dead) {
             shootCool = 0.15;
             const sp = 400;
-            playerBullets.push({
+            const b = {
                 x: player.x + Math.cos(player.angle) * 16,
                 y: player.y + Math.sin(player.angle) * 16,
                 vx: player.vx + Math.cos(player.angle) * sp,
                 vy: player.vy + Math.sin(player.angle) * sp,
                 life: 2.2,
-            });
+            };
+            playerBullets.push(b);
+            sendNetShoot(b);
         }
 
         // — Player physics —
@@ -365,6 +531,17 @@
                 }
             }
         }
+
+        // — Remote players' bullets (cosmetic only — don't damage entities
+        //   or kill the local player; each client resolves its own combat) —
+        remoteBullets = remoteBullets.filter(b => {
+            b.x += b.vx * dt; b.y += b.vy * dt;
+            b.life -= dt; wrapPos(b);
+            return b.life > 0;
+        });
+
+        sendNetState(dt);
+        pruneStaleRemotes();
     }
 
     // ── Draw ──────────────────────────────────────────────────────────────
@@ -493,6 +670,39 @@
             ctx.fill();
         }
 
+        // ── Remote players (other people in the same game) ──
+        for (const id in remotePlayers) {
+            const rp = remotePlayers[id];
+            if (rp.dead) continue;
+            const [rx, ry] = w2s(rp.x, rp.y);
+            if (!onScreen(rx, ry)) continue;
+            ctx.fillStyle = '#7fdc8f';
+            const h = [Math.cos(rp.angle), Math.sin(rp.angle)];
+            const r = [Math.cos(rp.angle+2.5), Math.sin(rp.angle+2.5)];
+            const l = [Math.cos(rp.angle-2.5), Math.sin(rp.angle-2.5)];
+            const s = 12 * scx;
+            ctx.beginPath();
+            ctx.moveTo(rx + h[0]*s,     ry + h[1]*s);
+            ctx.lineTo(rx + r[0]*s*0.7, ry + r[1]*s*0.7);
+            ctx.lineTo(rx + l[0]*s*0.7, ry + l[1]*s*0.7);
+            ctx.closePath();
+            ctx.fill();
+            ctx.fillStyle = '#9fe0a8';
+            ctx.font = '11px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText(rp.name || id.slice(0, 6), rx, ry - 18 * scx);
+        }
+
+        // ── Remote players' bullets (cosmetic, greenish to distinguish) ──
+        ctx.fillStyle = '#90f0a0';
+        for (const b of remoteBullets) {
+            const [bx, by] = w2s(b.x, b.y);
+            if (!onScreen(bx, by, 20)) continue;
+            ctx.beginPath();
+            ctx.arc(bx, by, 3 * scx, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
         // ── Player ship ──
         if (!player.dead) {
             const [px, py] = w2s(player.x, player.y);
@@ -543,6 +753,16 @@
             mctx.fillStyle = '#b4c8ff';
             mctx.beginPath();
             mctx.arc(player.x * scx, player.y * scy, 3, 0, Math.PI * 2);
+            mctx.fill();
+        }
+
+        // Remote players
+        mctx.fillStyle = '#7fdc8f';
+        for (const id in remotePlayers) {
+            const rp = remotePlayers[id];
+            if (rp.dead) continue;
+            mctx.beginPath();
+            mctx.arc(rp.x * scx, rp.y * scy, 2.5, 0, Math.PI * 2);
             mctx.fill();
         }
 
