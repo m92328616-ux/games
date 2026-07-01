@@ -62,3 +62,4 @@ Each game can be run independently — see the sections above for specific instr
 ## License
 
 No license file is currently included. Add one if you intend to share or accept contributions to this project.
+Large files such as [`xpilot-webnet/`](xpilot-webnet/) would have to go through thorough checks to continue.
