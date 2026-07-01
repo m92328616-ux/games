@@ -33,7 +33,7 @@ A minimal XPilot-style top-down spaceship shooter, available in three flavors:
 
 Controls: arrow keys/WASD to rotate and thrust, Space to shoot, R to restart, Esc to quit. Touch controls are supported on mobile for the web versions.
 
-See [`xpilot-webnet/README.md`](xpilot-webnet/README.md) for full setup instructions, including running the multiplayer relay server, the web server, and troubleshooting network connectivity.
+See [`xpilot-webnet/README.md`](xpilot-webnet/README.md) for full setup instructions, including multiplayer, HTTPS, and network troubleshooting.
 
 **Quick start (desktop):**
 ```bash
@@ -45,9 +45,38 @@ python xpilot.py
 **Quick start (browser):**
 ```bash
 cd xpilot-webnet
-python web-server.py --port 8000
+pip install websockets
+python ws_server.py --host 0.0.0.0 --port 8765   # WebSocket relay (multiplayer)
+python web-server.py --port 8000                   # serves the game files
 # then open http://localhost:8000/xpilot-web.html
 ```
+
+#### WebSocket relay (`ws_server.py`)
+
+Browsers can't use the desktop UDP relay, so the web versions use a WebSocket relay instead. Both web clients (JavaScript and Pyodide) connect to it automatically on load — no extra setup in the browser.
+
+**Start the relay:**
+```bash
+python ws_server.py --host 0.0.0.0 --port 8765
+```
+
+This also opens an HTTP status endpoint on port 8766 by default:
+```bash
+curl http://localhost:8766/status
+# -> {"clients": 2, "list": [{"id": "...", "name": "..."}]}
+```
+
+**Friends on the same network (LAN):** have them open the host machine's LAN IP, e.g. `http://192.168.1.100:8000/xpilot-web.html` — the page auto-connects to the relay, no extra steps needed.
+
+**Friends over the internet:** forward TCP ports `8000` and `8765` on your router to the host machine, and share your public IP. For anything beyond quick testing, serving over HTTPS is recommended — see `xpilot-webnet/README.md` for instructions.
+
+**Stop the servers:**
+```bash
+pkill -f "python.*ws_server.py"
+pkill -f "python.*web-server.py"
+```
+
+Stale clients (e.g. closed browser tabs that didn't disconnect cleanly) are automatically dropped after 15 seconds.
 
 ## Getting Started
 
