@@ -16,6 +16,47 @@ Install dependencies first:
 ```bash
 pip install -r requirements.txt
 ```
+or you can install them one at a time using:
+
+```bash
+pip install pygame
+pip install websockets
+```
+__Remember to install these in a virtual enviorment__
+
+---
+
+## How to install a virtual enviornment on Mac/Linux/Windows
+
+To set up a virtual environment in Python using Visual Studio Code (VS Code), you can either use the VS Code Command Palette (automated method) or the built-in terminal (manual method).Before you start, make sure you have opened your project folder in VS Code (File > Open Folder...) and have the official Python extension installed.
+
+**Easiest Method (The Command Pallete):**
+1. By pressing ```Ctrl + Shift + P``` (Windows or Linux) or ```Cmd + Shift + P``` (Mac) 
+2. Type **```Python: Create Enviorment```** and select it.
+3. Choose **```Venv```** as your enviorment manager.
+4. Select your preffered Python interpreter from the list.
+5. Click **Yes** when VSCode asks you to automatically select it for your workspace folder.
+
+**Manual Method: The Intergrated Method**
+
+If you prefer using commands directly, open a new terminal in VS Code (Ctrl + \`\` or Terminal > New Terminal\`) and run the following based on your Operating System:
+
+1. Create the Enviorment
+    * Windows/Mac/Linux ```python -m venv .venv``` *(Note: Use ```python 3``` instead of ```python``` on Mac or Linux if required).*
+
+2. Select the Interpreter
+    1. Open the **Command Palatte**(```Ctrl/Cmd + Shift + P```).
+    2. Type  and select **```Python: Select Interpreter```**
+    3. Choose the option that starts with **```.venv```** from the list.
+
+3. Activate the Envoirment 
+    To make sure your terminal uses the virtual environment, close your current terminal window and open a new one (Terminal > New Terminal).Alternatively, you can manually activate it by running the script that matches your operating system:
+
+    * **Windows (Powershell)**: ```.venv\Scripts\Activate.ps1```
+    * **Windows (Command Prompt)**: ```.venv\Scripts\actvate.bat```
+    * **Mac/Linux**: ```[source] .venv/bin/actvate```
+
+    Once activated, you will see (.venv) appear at the very beginning of your terminal prompt line.
 
 ---
 
