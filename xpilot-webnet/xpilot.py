@@ -24,20 +24,16 @@ class Player:
         self.dead = False
 
     def update(self, dt):
-        # movement physics
         self.vx += math.cos(self.angle) * self.thrust * dt
         self.vy += math.sin(self.angle) * self.thrust * dt
-        # friction
         self.vx *= 0.995
         self.vy *= 0.995
         self.x += self.vx * dt
         self.y += self.vy * dt
-        # wrap
         self.x %= WIDTH
         self.y %= HEIGHT
 
     def draw(self, surf):
-        # simple triangle ship
         pts = []
         heading = (math.cos(self.angle), math.sin(self.angle))
         right = (math.cos(self.angle + 2.5), math.sin(self.angle + 2.5))
@@ -69,13 +65,20 @@ class Bullet:
 
 
 class Enemy:
-    def __init__(self):
-        self.x = random.uniform(0, WIDTH)
-        self.y = random.uniform(0, HEIGHT)
-        ang = random.uniform(0, math.tau)
-        self.vx = math.cos(ang) * random.uniform(20, 80)
-        self.vy = math.sin(ang) * random.uniform(20, 80)
-        self.r = random.randint(10, 26)
+    def __init__(self, x=None, y=None, vx=None, vy=None, r=None):
+        if x is None:
+            self.x = random.uniform(0, WIDTH)
+            self.y = random.uniform(0, HEIGHT)
+            ang = random.uniform(0, math.tau)
+            self.vx = math.cos(ang) * random.uniform(20, 80)
+            self.vy = math.sin(ang) * random.uniform(20, 80)
+            self.r = random.randint(10, 26)
+        else:
+            self.x = x
+            self.y = y
+            self.vx = vx
+            self.vy = vy
+            self.r = r
 
     def update(self, dt):
         self.x += self.vx * dt
@@ -86,18 +89,18 @@ class Enemy:
     def draw(self, surf):
         pygame.draw.circle(surf, (200, 120, 120), (int(self.x), int(self.y)), self.r)
 
-
-def dist(a, b):
-    return math.hypot(a.x - b.x, a.y - b.y)
+    def to_dict(self):
+        return {'x': self.x, 'y': self.y, 'vx': self.vx, 'vy': self.vy, 'r': self.r}
 
 
 class NetworkClient:
-    """Simple UDP relay client: sends local state to server and receives others."""
-    def __init__(self, server_host, server_port, player_ref, bullets_ref, others_ref):
+    """Simple UDP relay client with enemy sync. Lowest ID client is host."""
+    def __init__(self, server_host, server_port, player_ref, bullets_ref, others_ref, enemies_ref):
         self.server = (server_host, server_port)
         self.player = player_ref
         self.bullets = bullets_ref
         self.others = others_ref
+        self.enemies = enemies_ref
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.sock.settimeout(1.0)
@@ -108,6 +111,7 @@ class NetworkClient:
         self.send_thread = threading.Thread(target=self._send_loop, daemon=True)
         self.listen_thread.start()
         self.send_thread.start()
+        self.is_host = False
 
     def _listen(self):
         while self.running:
@@ -128,8 +132,10 @@ class NetworkClient:
             if mtype == 'state':
                 with self.lock:
                     self.others[sender] = {'x': msg.get('x',0), 'y': msg.get('y',0), 'angle': msg.get('angle',0)}
+                # Host election: lowest ID wins
+                all_ids = [self.id] + list(self.others.keys())
+                self.is_host = (min(all_ids) == self.id)
             elif mtype == 'shoot':
-                # append a remote bullet
                 bx = msg.get('x')
                 by = msg.get('y')
                 bvx = msg.get('vx')
@@ -137,12 +143,32 @@ class NetworkClient:
                 if bx is not None:
                     with self.lock:
                         self.bullets.append(Bullet(bx, by, bvx, bvy))
+            elif mtype == 'enemies':
+                # Apply host's enemy state
+                with self.lock:
+                    enemy_list = msg.get('enemies', [])
+                    if len(enemy_list) == len(self.enemies):
+                        for i, ed in enumerate(enemy_list):
+                            if i < len(self.enemies):
+                                e = self.enemies[i]
+                                e.x = ed.get('x', e.x)
+                                e.y = ed.get('y', e.y)
+                                e.vx = ed.get('vx', e.vx)
+                                e.vy = ed.get('vy', e.vy)
 
     def _send_loop(self):
         while self.running:
             try:
-                payload = {'type':'state','id':self.id,'x':self.player.x,'y':self.player.y,'angle':self.player.angle,'vx':self.player.vx,'vy':self.player.vy}
+                # Player state
+                payload = {'type':'state','id':self.id,'x':self.player.x,'y':self.player.y,
+                           'angle':self.player.angle,'vx':self.player.vx,'vy':self.player.vy}
                 self.sock.sendto(json.dumps(payload).encode('utf8'), self.server)
+
+                # Host broadcasts enemies
+                if self.is_host and random.random() < 0.3:
+                    enemy_data = [e.to_dict() for e in self.enemies]
+                    epayload = {'type':'enemies', 'id':self.id, 'enemies': enemy_data}
+                    self.sock.sendto(json.dumps(epayload).encode('utf8'), self.server)
             except Exception:
                 pass
             time.sleep(0.1)
@@ -175,12 +201,11 @@ def main(server_host=None, server_port=50000):
     score = 0
     shoot_cool = 0.0
 
-    # networking
     remote_players = {}
     netclient = None
     if server_host:
         try:
-            netclient = NetworkClient(server_host, server_port, player, bullets, remote_players)
+            netclient = NetworkClient(server_host, server_port, player, bullets, remote_players, enemies)
             print(f"Connected to server {server_host}:{server_port}")
         except Exception as e:
             print("Network disabled:", e)
@@ -197,7 +222,6 @@ def main(server_host=None, server_port=50000):
                 if event.key == pygame.K_ESCAPE:
                     running = False
                 if player.dead and event.key == pygame.K_r:
-                    # restart
                     player = Player(WIDTH // 2, HEIGHT // 2)
                     bullets = []
                     enemies = [Enemy() for _ in range(6)]
@@ -232,10 +256,12 @@ def main(server_host=None, server_port=50000):
             if b.life <= 0:
                 bullets.remove(b)
 
-        for e in enemies[:]:
-            e.update(dt)
+        # Enemy simulation: only host runs physics (others sync via network)
+        if not netclient or netclient.is_host:
+            for e in enemies[:]:
+                e.update(dt)
 
-        # collisions
+        # collisions (local for responsiveness)
         if not player.dead:
             for e in enemies:
                 if math.hypot(player.x - e.x, player.y - e.y) < e.r + 8:
@@ -265,13 +291,11 @@ def main(server_host=None, server_port=50000):
             txt = font.render("You Died - press R to restart", True, (220, 220, 220))
             screen.blit(txt, (WIDTH//2 - txt.get_width()//2, HEIGHT//2 - 12))
 
-        # draw remote players
         with (netclient.lock if netclient else threading.Lock()):
             for pid, info in remote_players.items():
                 rx = info.get('x', 0)
                 ry = info.get('y', 0)
                 ang = info.get('angle', 0)
-                # draw a small triangle for remote players (ghost color)
                 pts = []
                 heading = (math.cos(ang), math.sin(ang))
                 right = (math.cos(ang + 2.5), math.sin(ang + 2.5))
@@ -288,7 +312,6 @@ def main(server_host=None, server_port=50000):
         pygame.display.flip()
 
     pygame.quit()
-
     if netclient:
         netclient.close()
 

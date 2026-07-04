@@ -15,12 +15,14 @@ Protocol (JSON messages, one per WebSocket text frame):
     {"type": "state", "id": "...", "x":.., "y":.., "angle":.., "vx":.., "vy":..,
      "dead": bool}
     {"type": "shoot", "id": "...", "x":.., "y":.., "vx":.., "vy":..}
+    {"type": "enemies", "id": "...", "enemies": [...] }   # new: host broadcasts enemy state
     {"type": "leave", "id": "..."}
 
   Server -> Clients (broadcast to everyone except sender, plus a couple
   of server-originated message types):
     {"type": "state", "id": "...", ...}              (relayed)
     {"type": "shoot", "id": "...", ...}               (relayed)
+    {"type": "enemies", "id": "...", ...}            (new: relayed from host)
     {"type": "player_joined", "id": "...", "name": "..."}
     {"type": "player_left", "id": "..."}
     {"type": "roster", "players": [...]}              (sent to the joiner only)
@@ -28,12 +30,8 @@ Protocol (JSON messages, one per WebSocket text frame):
 Usage:
     pip install websockets
     python ws_server.py --host 0.0.0.0 --port 8765
-
-An HTTP status endpoint (GET /status) is also exposed on a separate
-port (default 8766) for quick diagnostics — this is what lets you
-verify the relay is alive over plain HTTP/HTTPS without opening a
-WebSocket client.
 """
+
 import argparse
 import asyncio
 import json
@@ -141,6 +139,11 @@ async def handler(ws):
                 async with CLIENTS_LOCK:
                     if cid in CLIENTS:
                         CLIENTS[cid]["last_seen"] = now()
+                await broadcast(msg, exclude_id=cid)
+
+            elif mtype == "enemies":
+                # Forward enemy state sync from the host to all other clients
+                cid = msg.get("id")
                 await broadcast(msg, exclude_id=cid)
 
             elif mtype == "leave":
