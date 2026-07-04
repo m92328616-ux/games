@@ -7,105 +7,89 @@
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html, body { width: 100%; height: 100%; overflow: hidden; }
-        body {
-            font-family: Arial, sans-serif;
-            background: #0c0c18;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-        #gameContainer {
-            position: relative;
-            width: 100%;
-            max-width: 900px;
-            aspect-ratio: 4/3;
-            background: #0c0c18;
-            border: 2px solid #444;
-            touch-action: none;
-        }
+        body { font-family: Arial, sans-serif; background: #0c0c18; }
+        #gameContainer { position: fixed; inset: 0; background: #0c0c18; touch-action: none; }
         canvas { display: block; width: 100%; height: 100%; }
-        #info {
-            position: absolute;
-            top: 10px; right: 10px;
-            color: #c8c8c8;
-            font-size: 14px;
-            font-family: monospace;
-            z-index: 100;
-            pointer-events: none;
-            text-align: right;
-            line-height: 1.6;
-        }
-        #deadMsg {
-            position: absolute;
-            top: 50%; left: 50%;
-            transform: translate(-50%, -50%);
-            color: #dcdcdc; font-size: 18px; text-align: center;
-            background: rgba(0,0,0,0.75);
-            padding: 20px; border-radius: 5px;
-            z-index: 200; pointer-events: none; display: none;
-        }
-        #minimapWrap {
-            position: absolute;
-            top: 10px; left: 10px;
-            z-index: 100; pointer-events: none;
-            background: rgba(0,0,0,0.5);
-            border: 1px solid #555;
-            border-radius: 4px;
-            padding: 3px;
-        }
+        #info { position: absolute; top: 10px; right: 10px; color: #c8c8c8; font-size: 14px; font-family: monospace; z-index: 100; pointer-events: none; text-align: right; line-height: 1.6; }
+        #deadMsg { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); color: #dcdcdc; font-size: 18px; text-align: center; background: rgba(0,0,0,0.75); padding: 20px; border-radius: 5px; z-index: 200; pointer-events: none; display: none; }
+        #minimapWrap { position: absolute; top: 10px; left: 10px; z-index: 100; pointer-events: none; background: rgba(0,0,0,0.5); border: 1px solid #555; border-radius: 4px; padding: 3px; }
         #minimap { display: block; border-radius: 2px; }
-        #minimapLabel {
-            font-family: monospace; font-size: 10px;
-            color: #888; text-align: center; margin-top: 2px;
-        }
-        #controls {
-            position: absolute;
-            bottom: 0; left: 0; right: 0; height: 120px;
-            display: flex; justify-content: space-between;
-            padding: 10px; gap: 10px; pointer-events: none;
-        }
-        .joystick-area {
-            width: 100px; height: 100px;
-            background: rgba(100,100,150,0.3);
-            border: 2px solid #666; border-radius: 50%;
-            pointer-events: auto;
-        }
+        #minimapLabel { font-family: monospace; font-size: 10px; color: #888; text-align: center; margin-top: 2px; }
+        #effectsBar { position: absolute; bottom: 130px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; z-index: 110; pointer-events: none; flex-wrap: wrap; justify-content: center; max-width: 90vw; }
+        .eff-chip { padding: 3px 9px; border-radius: 20px; font-family: monospace; font-size: 12px; font-weight: bold; border: 1px solid rgba(255,255,255,0.25); white-space: nowrap; }
+        #toastStack { position: absolute; top: 60px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; z-index: 300; pointer-events: none; }
+        .toast { padding: 7px 18px; border-radius: 6px; font-family: monospace; font-size: 15px; font-weight: bold; border: 1px solid rgba(255,255,255,0.3); background: rgba(10,10,30,0.85); text-align: center; white-space: nowrap; }
+        #settingsBtn { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 110; pointer-events: auto; background: rgba(30,30,50,0.85); border: 1px solid #555; color: #bbb; font-size: 18px; width: 36px; height: 36px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.15s, color 0.15s; }
+        #settingsBtn:hover { background: rgba(80,80,120,0.9); color: #fff; }
+        #settingsOverlay { display: none; position: fixed; inset: 0; z-index: 500; background: rgba(0,0,0,0.65); backdrop-filter: blur(4px); align-items: center; justify-content: center; }
+        #settingsOverlay.open { display: flex; }
+        #settingsPanel { background: #14142a; border: 1px solid #3a3a6a; border-radius: 10px; padding: 24px 28px; width: min(440px,94vw); max-height: 90vh; overflow-y: auto; color: #d0d0e8; font-family: monospace; position: relative; }
+        #settingsPanel h2 { font-size: 17px; color: #a0b0ff; margin-bottom: 18px; letter-spacing: 1px; text-transform: uppercase; }
+        .s-close { position: absolute; top: 14px; right: 16px; background: none; border: none; color: #888; font-size: 22px; cursor: pointer; line-height: 1; }
+        .s-close:hover { color: #fff; }
+        .s-section { font-size: 11px; color: #6070a0; letter-spacing: 1px; text-transform: uppercase; margin: 18px 0 8px; border-bottom: 1px solid #2a2a50; padding-bottom: 4px; }
+        .s-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+        .s-row label { font-size: 13px; color: #b0b8d8; flex: 1; }
+        .s-row .s-val { font-size: 12px; color: #7080c0; min-width: 48px; text-align: right; }
+        .s-row input[type=range] { flex: 2; accent-color: #6080ff; height: 4px; cursor: pointer; }
+        .s-row input[type=text] { flex: 2; background: #0e0e22; border: 1px solid #3a3a6a; color: #d0d0f0; padding: 5px 8px; border-radius: 4px; font-family: monospace; font-size: 13px; }
+        .s-row input[type=text]:focus { outline: none; border-color: #6080ff; }
+        .s-row select { flex: 2; background: #0e0e22; border: 1px solid #3a3a6a; color: #d0d0f0; padding: 5px 8px; border-radius: 4px; font-family: monospace; font-size: 13px; cursor: pointer; }
+        .s-btn { padding: 7px 18px; background: #2a2a5a; border: 1px solid #4a4a8a; color: #a0b0ff; border-radius: 5px; cursor: pointer; font-family: monospace; font-size: 13px; }
+        .s-btn:hover { background: #3a3a7a; color: #fff; }
+        .s-btn.primary { background: #304090; border-color: #6080ff; }
+        .s-btn.primary:hover { background: #405098; }
+        #zoomDisplay { font-size: 11px; color: #6070a0; text-align: center; margin-top: 4px; }
+        #controls { position: absolute; bottom: 0; left: 0; right: 0; height: 120px; display: flex; justify-content: space-between; padding: 10px; gap: 10px; pointer-events: none; }
+        .joystick-area { width: 100px; height: 100px; background: rgba(100,100,150,0.3); border: 2px solid #666; border-radius: 50%; pointer-events: auto; }
         .buttons-area { display: flex; flex-direction: column; gap: 5px; pointer-events: auto; }
-        .control-btn {
-            width: 90px; height: 40px;
-            background: rgba(100,150,100,0.3);
-            border: 2px solid #666; color: #aaa;
-            font-size: 12px; border-radius: 5px;
-            touch-action: none; user-select: none;
-            display: flex; align-items: center; justify-content: center;
-        }
+        .control-btn { width: 90px; height: 40px; background: rgba(100,150,100,0.3); border: 2px solid #666; color: #aaa; font-size: 12px; border-radius: 5px; touch-action: none; user-select: none; display: flex; align-items: center; justify-content: center; }
         .control-btn.shoot { flex: 1; width: 90px; height: auto; min-height: 50px; }
-        @media (max-width: 480px) {
-            #info { font-size: 12px; }
-            .control-btn { width: 70px; font-size: 11px; }
-        }
+        @media (max-width: 480px) { #info { font-size: 12px; } .control-btn { width: 70px; font-size: 11px; } }
     </style>
 </head>
 <body>
 <div id="gameContainer">
     <canvas id="gameCanvas"></canvas>
-
     <div id="minimapWrap">
         <canvas id="minimap" width="150" height="113"></canvas>
         <div id="minimapLabel">minimap</div>
     </div>
-
     <div id="info">
         Score: <span id="score">0</span><br>
         <span style="color:#c87878">● circle</span> 10pts&nbsp;
         <span style="color:#f0a050">▲ shooter</span> 20pts&nbsp;
         <span style="color:#b07fe0">■ tank</span> 50pts<br>
         <span id="connStatus" style="color:#888">Offline (single player)</span><span id="roleTag" style="font-size:11px"></span>
-        <span id="playerCount"></span>
+        <span id="playerCount"></span><br>
+        <span id="zoomHud" style="color:#6070a0;font-size:11px"></span>
     </div>
-
+    <div id="effectsBar"></div>
+    <div id="toastStack"></div>
+    <button id="settingsBtn" title="Settings">⚙</button>
     <div id="deadMsg">You Died<br>Press R to restart</div>
-
+    <div id="settingsOverlay">
+        <div id="settingsPanel">
+            <button class="s-close" id="settingsClose">✕</button>
+            <h2>⚙ Settings</h2>
+            <div class="s-section">Player</div>
+            <div class="s-row"><label>Name</label><input type="text" id="sName" maxlength="20" placeholder="Pilot name"></div>
+            <div class="s-section">Controls</div>
+            <div class="s-row"><label>Turn mode</label><select id="sTurnMode"><option value="keyboard">Keyboard / Touch</option><option value="mouse">Mouse follow</option></select></div>
+            <div class="s-row"><label>Turn sensitivity</label><input type="range" id="sSens" min="0.5" max="8" step="0.1" value="3"><span class="s-val" id="sSensVal">3.0</span></div>
+            <div class="s-section">View</div>
+            <div class="s-row"><label>Zoom / FOV</label><input type="range" id="sZoom" min="0.25" max="3" step="0.05" value="1"><span class="s-val" id="sZoomVal">1.0×</span></div>
+            <div id="zoomDisplay">Scroll wheel also adjusts zoom in-game</div>
+            <div class="s-section">Performance</div>
+            <div class="s-row"><label>FPS cap</label><input type="range" id="sFps" min="15" max="240" step="5" value="60"><span class="s-val" id="sFpsVal">60</span></div>
+            <div class="s-row"><label>Unlimited FPS</label><select id="sFpsUnlimit"><option value="0">Off</option><option value="1">On</option></select></div>
+            <br>
+            <div style="display:flex;gap:10px;justify-content:flex-end">
+                <button class="s-btn" id="sReset">Reset defaults</button>
+                <button class="s-btn primary" id="sApply">Apply &amp; close</button>
+            </div>
+        </div>
+    </div>
     <div id="controls">
         <div class="joystick-area" id="joystick"></div>
         <div class="buttons-area">
@@ -115,886 +99,857 @@
         </div>
     </div>
 </div>
-
 <script>
-    const WORLD_W = 3200, WORLD_H = 2400;
-    const VIEW_W  = 800,  VIEW_H  = 600;
+// ── World ──────────────────────────────────────────────────────────────────
+const WORLD_W = 3200, WORLD_H = 2400;
 
-    // Entity counts per type
-    const N_CIRCLES   = 14;  // dumb wanderers,  10 pts
-    const N_SHOOTERS  = 8;   // orange triangles, 20 pts, fire back slowly
-    const N_TANKS     = 5;   // purple squares,   50 pts, slow & chunky
+// ── Settings ───────────────────────────────────────────────────────────────
+const DEFAULTS = { sensitivity:3.0, turnMode:'keyboard', zoom:1.0, fpsCap:60, unlimitFps:false };
+let sensitivity=DEFAULTS.sensitivity, turnMode=DEFAULTS.turnMode, zoomLevel=DEFAULTS.zoom,
+    fpsCap=DEFAULTS.fpsCap, unlimitFps=DEFAULTS.unlimitFps;
 
-    // ── Multiplayer state ────────────────────────────────────────────────
-    const MY_ID = 'p_' + Math.random().toString(36).slice(2, 10);
-    let myName = 'Pilot-' + MY_ID.slice(2, 6);
-    let remotePlayers = {};   // id -> { x, y, angle, dead, name, lastUpdate }
-    let remoteBullets = [];   // bullets fired by other players
-    let ws = null;
-    let netState = 'offline'; // offline | connecting | connected | error
-    const STATE_SEND_HZ = 15;
-    let stateSendAccum = 0;
-    const REMOTE_TIMEOUT = 8.0;
+const THRUST_POWER=200, BULLET_SPEED=400, SHOOT_COOL_BASE=0.15;
+const BASE_VIEW_W=800;
+let viewW=BASE_VIEW_W, viewH=600;
+const MIN_ZOOM=0.25, MAX_ZOOM=3.0, ZOOM_STEP=0.08;
+function recalcView(){viewW=BASE_VIEW_W/zoomLevel;viewH=viewW*(canvas.height/canvas.width);}
 
-    // ── Host election ─────────────────────────────────────────────────────
-    // The client with the lexicographically smallest ID is the host.
-    // The host runs the authoritative entity simulation and broadcasts
-    // entity state to all other clients at ENTITY_SEND_HZ.
-    let allKnownIds = new Set([MY_ID]);
-    let isHost = true;   // true until another player joins with a lower ID
+// ── Entity counts ──────────────────────────────────────────────────────────
+const N_CIRCLES=14, N_SHOOTERS=8, N_TANKS=5;
 
-    function reelectHost() {
-        const minId = [...allKnownIds].sort()[0];
-        isHost = (minId === MY_ID);
+// ── Power-ups ──────────────────────────────────────────────────────────────
+const POWERUP_DEFS={
+    speed:      {label:'⚡ Speed Boost',    color:'#60d0ff',bg:'rgba(40,120,200,0.25)', duration:10},
+    rapid:      {label:'🔫 Rapid Fire',      color:'#ffdd44',bg:'rgba(200,160,0,0.25)',  duration:8 },
+    shield:     {label:'🛡 Shield',           color:'#4488ff',bg:'rgba(30,60,200,0.25)',  duration:15},
+    triple:     {label:'🔱 Triple Shot',      color:'#ff8844',bg:'rgba(200,80,20,0.25)',  duration:10},
+    big_bullet: {label:'💥 Big Bullets',      color:'#ff44aa',bg:'rgba(180,20,120,0.25)', duration:10},
+    slow:       {label:'❄️ Enemy Slow',        color:'#44ffaa',bg:'rgba(20,180,100,0.25)', duration:8 },
+    score_mult: {label:'🌟 2× Score',          color:'#ffcc00',bg:'rgba(180,140,0,0.25)',  duration:12},
+    homing:     {label:'🎯 Homing Bullets',   color:'#ff4444',bg:'rgba(180,20,20,0.25)',  duration:10},
+    ghost:      {label:'👻 Ghost Mode',        color:'#cc99ff',bg:'rgba(120,40,200,0.25)', duration:6 },
+    overdrive:  {label:'🔥 OVERDRIVE',         color:'#ff6600',bg:'rgba(200,60,0,0.25)',   duration:7 },
+};
+const POWERUP_KINDS=Object.keys(POWERUP_DEFS);
+const N_CUBES=15;
+
+// ── Multiplayer ────────────────────────────────────────────────────────────
+const MY_ID='p_'+Math.random().toString(36).slice(2,10);
+let myName='Pilot-'+MY_ID.slice(2,6);
+let remotePlayers={}, remoteBullets=[], ws=null, netState='offline';
+const STATE_SEND_HZ=15; let stateSendAccum=0; const REMOTE_TIMEOUT=8.0;
+let allKnownIds=new Set([MY_ID]), isHost=true;
+function reelectHost(){isHost=([...allKnownIds].sort()[0]===MY_ID);}
+const ENTITY_SEND_HZ=12; let entitySendAccum=0;
+
+// ── Canvas ─────────────────────────────────────────────────────────────────
+const canvas=document.getElementById('gameCanvas'), ctx=canvas.getContext('2d');
+const gc=document.getElementById('gameContainer');
+const mm=document.getElementById('minimap'), mctx=mm.getContext('2d');
+function resize(){const r=gc.getBoundingClientRect();canvas.width=r.width;canvas.height=r.height;recalcView();}
+resize(); window.addEventListener('resize',resize);
+function wrapDelta(a,b,size){let d=((b-a)%size+size)%size;if(d>size/2)d-=size;return d;}
+
+// ── Seeded RNG (deterministic map for all clients) ─────────────────────────
+function mkRng(seed){
+    let s=seed>>>0;
+    return()=>{s=(Math.imul(1664525,s)+1013904223)>>>0;return s/0x100000000;};
+}
+const mapRng=mkRng(0x58506c74); // 'XPlt'
+
+// ── Obstacle generation (polygon blobs, XPilot-style rocky terrain) ────────
+function genBlobPts(cx,cy,baseR,nPts,rand){
+    const angs=Array.from({length:nPts},(_,i)=>(i/nPts)*Math.PI*2+(rand()-0.5)*0.55).sort((a,b)=>a-b);
+    return angs.map(a=>{const r=baseR*(0.52+0.48*rand());return{x:cx+Math.cos(a)*r,y:cy+Math.sin(a)*r};});
+}
+
+function buildObstacles(){
+    const obs=[];
+    const SPAWN_CX=WORLD_W/2, SPAWN_CY=WORLD_H/2, CLEAR_R=380;
+    const MIN_SEP=300;
+    let attempts=0;
+    while(obs.length<18 && attempts<600){
+        attempts++;
+        const cx=120+mapRng()*(WORLD_W-240);
+        const cy=120+mapRng()*(WORLD_H-240);
+        if(Math.hypot(cx-SPAWN_CX,cy-SPAWN_CY)<CLEAR_R) continue;
+        let ok=true;
+        for(const o of obs){if(Math.hypot(cx-o.cx,cy-o.cy)<MIN_SEP){ok=false;break;}}
+        if(!ok) continue;
+        const baseR=80+mapRng()*130;
+        const nPts=8+Math.floor(mapRng()*6);
+        const pts=genBlobPts(cx,cy,baseR,nPts,mapRng);
+        // shade varies per obstacle for visual variety
+        const shade=Math.floor(mapRng()*3);
+        obs.push({pts,cx,cy,r:baseR*1.15,shade});
     }
+    return obs;
+}
+const obstacles=buildObstacles();
 
-    const ENTITY_SEND_HZ = 12;    // entity state broadcasts per second
-    let entitySendAccum = 0;
-
-    const canvas = document.getElementById('gameCanvas');
-    const ctx    = canvas.getContext('2d');
-    const gc     = document.getElementById('gameContainer');
-    const mm     = document.getElementById('minimap');
-    const mctx   = mm.getContext('2d');
-
-    function resize() {
-        const r = gc.getBoundingClientRect();
-        canvas.width = r.width; canvas.height = r.height;
+// ── Polygon collision helpers ──────────────────────────────────────────────
+function pointInPoly(px,py,pts){
+    let inside=false;
+    for(let i=0,j=pts.length-1;i<pts.length;j=i++){
+        const xi=pts[i].x,yi=pts[i].y,xj=pts[j].x,yj=pts[j].y;
+        if(((yi>py)!==(yj>py))&&(px<(xj-xi)*(py-yi)/(yj-yi)+xi))inside=!inside;
     }
-    resize();
-    window.addEventListener('resize', resize);
+    return inside;
+}
+// Signed distance from point to line segment (returns negative if close)
+function distSqPointSeg(px,py,ax,ay,bx,by){
+    const dx=bx-ax,dy=by-ay,len2=dx*dx+dy*dy;
+    if(len2===0)return Math.hypot(px-ax,py-ay);
+    const t=Math.max(0,Math.min(1,((px-ax)*dx+(py-ay)*dy)/len2));
+    return Math.hypot(px-(ax+t*dx),py-(ay+t*dy));
+}
+function circleHitsObs(cx,cy,r,obs){
+    if(Math.hypot(cx-obs.cx,cy-obs.cy)>obs.r+r+10)return false;
+    if(pointInPoly(cx,cy,obs.pts))return true;
+    const pts=obs.pts;
+    for(let i=0,j=pts.length-1;i<pts.length;j=i++){
+        if(distSqPointSeg(cx,cy,pts[j].x,pts[j].y,pts[i].x,pts[i].y)<r)return true;
+        i++;
+    }
+    return false;
+}
+// Push an object out of all obstacles; also cancels velocity component
+function resolveObstacles(obj,radius){
+    for(const obs of obstacles){
+        if(!circleHitsObs(obj.x,obj.y,radius,obs))continue;
+        // Push away from obstacle centre
+        let dx=obj.x-obs.cx, dy=obj.y-obs.cy;
+        const d=Math.hypot(dx,dy)||1;
+        dx/=d; dy/=d;
+        obj.x+=dx*4; obj.y+=dy*4;
+        if(obj.vx!==undefined){
+            const dot=obj.vx*dx+obj.vy*dy;
+            if(dot<0){obj.vx-=dot*dx*1.1;obj.vy-=dot*dy*1.1;}
+        }
+    }
+    wrapPos(obj);
+}
+// Obstacle repulsion force for AI steering (returns {fx,fy})
+function obsRepulsion(ox,oy){
+    let fx=0,fy=0;
+    for(const obs of obstacles){
+        const dx=ox-obs.cx, dy=oy-obs.cy;
+        const d=Math.hypot(dx,dy)||1;
+        const margin=obs.r+140;
+        if(d<margin){
+            const str=(margin-d)/margin*280;
+            fx+=dx/d*str; fy+=dy/d*str;
+        }
+    }
+    return{fx,fy};
+}
 
-    function wrapDelta(a, b, size) {
-        let d = ((b - a) % size + size) % size;
-        if (d > size / 2) d -= size;
+// ── Entity generation counter ──────────────────────────────────────────────
+let _nextGen=1; function nextGen(){return _nextGen++;}
+
+// ── Enemy AI profiles ──────────────────────────────────────────────────────
+const AI={
+    circle:  {viewRadius:380, thrustForce:82,  maxSpeed:120, turnRate:2.8,  drag:0.984, preferDist:0  },
+    shooter: {viewRadius:520, thrustForce:52,  maxSpeed:80,  turnRate:1.9,  drag:0.988, preferDist:210},
+    tank:    {viewRadius:300, thrustForce:115, maxSpeed:55,  turnRate:1.15, drag:0.978, preferDist:0  },
+};
+
+function mkCircle(){
+    const ang=Math.random()*Math.PI*2;
+    const ai=AI.circle;
+    return{kind:'circle',gen:nextGen(),
+        x:Math.random()*WORLD_W,y:Math.random()*WORLD_H,
+        vx:Math.cos(ang)*30,vy:Math.sin(ang)*30,
+        angle:ang,r:10+Math.floor(Math.random()*16),
+        pts:10,hp:1,maxHp:1,hitFlash:0,
+        ...ai,wanderAngle:ang,wanderTimer:Math.random()*2};
+}
+function mkShooter(){
+    const ang=Math.random()*Math.PI*2;
+    const ai=AI.shooter;
+    return{kind:'shooter',gen:nextGen(),
+        x:Math.random()*WORLD_W,y:Math.random()*WORLD_H,
+        vx:Math.cos(ang)*20,vy:Math.sin(ang)*20,
+        angle:ang,r:13,pts:20,
+        fireCool:2+Math.random()*2,hp:2,maxHp:2,hitFlash:0,
+        ...ai,wanderAngle:ang,wanderTimer:Math.random()*2};
+}
+function mkTank(){
+    const ang=Math.random()*Math.PI*2;
+    const ai=AI.tank;
+    return{kind:'tank',gen:nextGen(),
+        x:Math.random()*WORLD_W,y:Math.random()*WORLD_H,
+        vx:Math.cos(ang)*10,vy:Math.sin(ang)*10,
+        angle:ang,r:22+Math.floor(Math.random()*10),
+        pts:50,hp:5,maxHp:5,hitFlash:0,
+        ...ai,wanderAngle:ang,wanderTimer:Math.random()*2};
+}
+
+// ── Power cube factory ─────────────────────────────────────────────────────
+function mkCube(kindOverride){
+    const kind=kindOverride||POWERUP_KINDS[Math.floor(Math.random()*POWERUP_KINDS.length)];
+    return{kind,x:80+Math.random()*(WORLD_W-160),y:80+Math.random()*(WORLD_H-160),r:10,pulse:Math.random()*Math.PI*2,active:true,respawnTimer:0};
+}
+
+// ── Active effects ─────────────────────────────────────────────────────────
+let activeEffects={};
+function hasEffect(n){return n in activeEffects&&activeEffects[n]>0;}
+function applyEffect(n){const d=POWERUP_DEFS[n];if(!d)return;activeEffects[n]=d.duration;showToast(d.label,d.color);}
+function tickEffects(dt){for(const n in activeEffects){activeEffects[n]-=dt;if(activeEffects[n]<=0)delete activeEffects[n];}}
+
+// ── Derived stats ──────────────────────────────────────────────────────────
+function effectiveThrust()   {return hasEffect('speed')||hasEffect('overdrive')?THRUST_POWER*2.2:THRUST_POWER;}
+function effectiveShootCool(){return hasEffect('rapid')||hasEffect('overdrive')?SHOOT_COOL_BASE/3:SHOOT_COOL_BASE;}
+function effectiveBulletSpd(){return hasEffect('overdrive')?BULLET_SPEED*1.5:BULLET_SPEED;}
+function effectiveBulletR()  {return hasEffect('big_bullet')?9:3;}
+function effectiveBulletDmg(){return hasEffect('big_bullet')?2:1;}
+function bulletCount()       {return hasEffect('triple')?3:1;}
+function scoreMultiplier()   {return hasEffect('score_mult')||hasEffect('overdrive')?2:1;}
+function slowFactor()        {return hasEffect('slow')?0.35:1;}
+function isGhost()           {return hasEffect('ghost')||hasEffect('overdrive');}
+
+// ── Toast notifications ────────────────────────────────────────────────────
+let toasts=[];
+function showToast(text,color='#fff'){
+    const el=document.createElement('div');
+    el.className='toast'; el.textContent=text; el.style.color=color;
+    el.style.borderColor=color+'55'; el.style.boxShadow=`0 0 12px ${color}44`;
+    document.getElementById('toastStack').appendChild(el);
+    toasts.push({el,timeLeft:2.8,maxTime:2.8});
+    if(toasts.length>4){const old=toasts.shift();old.el.remove();}
+}
+function tickToasts(dt){
+    for(let i=toasts.length-1;i>=0;i--){
+        toasts[i].timeLeft-=dt;
+        const t=toasts[i].timeLeft;
+        toasts[i].el.style.opacity=t<0.6?(t/0.6).toFixed(2):'1';
+        if(t<=0){toasts[i].el.remove();toasts.splice(i,1);}
+    }
+}
+
+// ── Game state ─────────────────────────────────────────────────────────────
+let player,playerBullets,enemyBullets,entities,powerCubes,score,shootCool;
+let keys={},touch={left:0,right:0,thrust:false,shoot:false};
+
+function initGame(){
+    player={x:WORLD_W/2,y:WORLD_H/2,vx:0,vy:0,angle:0,thrust:0,dead:false};
+    playerBullets=[]; enemyBullets=[]; score=0; shootCool=0; activeEffects={};
+    entities=[
+        ...Array.from({length:N_CIRCLES}, mkCircle),
+        ...Array.from({length:N_SHOOTERS},mkShooter),
+        ...Array.from({length:N_TANKS},   mkTank),
+    ];
+    powerCubes=Array.from({length:N_CUBES},()=>mkCube());
+}
+function restart(){initGame();document.getElementById('restartBtn').style.display='none';document.getElementById('deadMsg').style.display='none';}
+
+// ── Mouse ──────────────────────────────────────────────────────────────────
+let mouseX=0,mouseY=0;
+canvas.addEventListener('mousemove',e=>{const r=canvas.getBoundingClientRect();mouseX=e.clientX-r.left;mouseY=e.clientY-r.top;});
+
+// ── Networking ─────────────────────────────────────────────────────────────
+function setConnStatus(state,text){
+    netState=state;const el=document.getElementById('connStatus');el.textContent=text;
+    el.style.color=state==='connected'?'#7fdc8f':state==='connecting'?'#e0c060':state==='error'?'#e07070':'#888';
+}
+function wsUrlGuess(){const p=location.protocol==='https:'?'wss:':'ws:';return`${p}//${location.hostname||'localhost'}:8765`;}
+function connectMultiplayer(url){
+    if(ws){try{ws.close();}catch(e){}}
+    setConnStatus('connecting','Connecting...');
+    try{ws=new WebSocket(url);}catch(e){setConnStatus('error','Connection failed');return;}
+    ws.onopen=()=>{setConnStatus('connected','Connected');ws.send(JSON.stringify({type:'join',id:MY_ID,name:myName}));};
+    ws.onmessage=ev=>{let m;try{m=JSON.parse(ev.data);}catch(e){return;}handleNetMessage(m);};
+    ws.onerror=()=>setConnStatus('error','Connection error');
+    ws.onclose=()=>{
+        if(netState!=='error')setConnStatus('offline','Offline (single player)');
+        for(const id of [...allKnownIds]){if(id!==MY_ID)allKnownIds.delete(id);}
+        for(const id in remotePlayers)delete remotePlayers[id];
+        reelectHost(); updatePlayerCount();
+    };
+}
+function handleNetMessage(msg){
+    if(!msg?.type)return;
+    if(msg.type==='roster'){(msg.players||[]).forEach(p=>{if(p.id!==MY_ID){allKnownIds.add(p.id);upsertRemote(p.id,p.name,p.state);}});reelectHost();updatePlayerCount();return;}
+    if(msg.type==='player_joined'){if(msg.id===MY_ID)return;allKnownIds.add(msg.id);reelectHost();if(!remotePlayers[msg.id])remotePlayers[msg.id]={x:WORLD_W/2,y:WORLD_H/2,angle:0,dead:false,name:msg.name||msg.id.slice(0,6),lastUpdate:performance.now()/1000};updatePlayerCount();return;}
+    if(msg.type==='player_left'){allKnownIds.delete(msg.id);reelectHost();delete remotePlayers[msg.id];updatePlayerCount();return;}
+    if(msg.type==='state'){if(msg.id===MY_ID)return;if(!allKnownIds.has(msg.id)){allKnownIds.add(msg.id);reelectHost();}upsertRemote(msg.id,msg.name,msg);return;}
+    if(msg.type==='shoot'){if(msg.id!==MY_ID)remoteBullets.push({x:msg.x,y:msg.y,vx:msg.vx,vy:msg.vy,life:2.2});return;}
+    if(msg.type==='enemies'){if(msg.id!==MY_ID&&!isHost)applyHostEntities(msg.entities||[]);return;}
+    if(msg.type==='hit'){
+        if(!isHost||msg.id===MY_ID)return;
+        const e=entities[msg.idx];if(!e)return;
+        if(msg.gen!==undefined&&e.gen!==msg.gen)return;
+        e.hp=Math.max(0,e.hp-1);e.hitFlash=0.18;
+        if(e.hp<=0)entities.splice(msg.idx,1,e.kind==='circle'?mkCircle():e.kind==='shooter'?mkShooter():mkTank());
+        return;
+    }
+}
+function upsertRemote(id,name,state){
+    if(!state)return;const ex=!!remotePlayers[id];
+    remotePlayers[id]={x:state.x,y:state.y,angle:state.angle||0,dead:!!state.dead,name:name||(remotePlayers[id]?.name)||id.slice(0,6),lastUpdate:performance.now()/1000};
+    if(!ex)updatePlayerCount();
+}
+function updatePlayerCount(){const n=Object.keys(remotePlayers).length;document.getElementById('playerCount').textContent=n>0?` · ${n} other pilot${n===1?'':'s'} online`:'';}
+function pruneStaleRemotes(){const now=performance.now()/1000;let ch=false;for(const id in remotePlayers){if(now-remotePlayers[id].lastUpdate>REMOTE_TIMEOUT){allKnownIds.delete(id);delete remotePlayers[id];ch=true;}}if(ch){reelectHost();updatePlayerCount();}}
+
+// ── Entity sync ────────────────────────────────────────────────────────────
+function serializeEntities(){
+    return entities.map(e=>{
+        const d={kind:e.kind,gen:e.gen,x:Math.round(e.x*10)/10,y:Math.round(e.y*10)/10,
+            vx:Math.round(e.vx*10)/10,vy:Math.round(e.vy*10)/10,
+            angle:Math.round((e.angle||0)*1000)/1000,
+            r:e.r,hp:e.hp,maxHp:e.maxHp,pts:e.pts};
+        if(e.kind==='shooter'){d.fireCool=Math.round(e.fireCool*100)/100;}
         return d;
-    }
-
-    // ── Entity factories ──────────────────────────────────────────────────
-
-    // Each entity carries a `gen` (generation) counter that increments every
-    // time the entity is replaced (killed + respawned).  Hit messages include
-    // the sender's `gen` value; the host rejects hits whose gen doesn't match
-    // the current entity at that index, preventing stale hits from damaging
-    // freshly-spawned enemies.
-    let _nextGen = 1;
-    function nextGen() { return _nextGen++; }
-
-    // HP per type: circles = 1 (one-shot), shooters = 2, tanks = 5
-    function mkCircle() {
-        const ang = Math.random() * Math.PI * 2;
-        return {
-            kind: 'circle', gen: nextGen(),
-            x: Math.random() * WORLD_W, y: Math.random() * WORLD_H,
-            vx: Math.cos(ang) * (20 + Math.random() * 60),
-            vy: Math.sin(ang) * (20 + Math.random() * 60),
-            r: 10 + Math.floor(Math.random() * 16),
-            pts: 10, hp: 1, maxHp: 1, hitFlash: 0,
-        };
-    }
-
-    function mkShooter() {
-        const ang = Math.random() * Math.PI * 2;
-        return {
-            kind: 'shooter', gen: nextGen(),
-            x: Math.random() * WORLD_W, y: Math.random() * WORLD_H,
-            vx: Math.cos(ang) * (15 + Math.random() * 35),
-            vy: Math.sin(ang) * (15 + Math.random() * 35),
-            r: 13, pts: 20, angle: ang,
-            fireCool: 2 + Math.random() * 2,
-            hp: 2, maxHp: 2, hitFlash: 0,
-        };
-    }
-
-    function mkTank() {
-        const ang = Math.random() * Math.PI * 2;
-        return {
-            kind: 'tank', gen: nextGen(),
-            x: Math.random() * WORLD_W, y: Math.random() * WORLD_H,
-            vx: Math.cos(ang) * (8 + Math.random() * 12),
-            vy: Math.sin(ang) * (8 + Math.random() * 12),
-            r: 22 + Math.floor(Math.random() * 10),
-            pts: 50, hp: 5, maxHp: 5, hitFlash: 0,
-        };
-    }
-
-    // ── State ─────────────────────────────────────────────────────────────
-
-    let player, playerBullets, enemyBullets, entities, score, shootCool;
-    let keys = {}, touch = { left: 0, right: 0, thrust: false, shoot: false };
-
-    function initGame() {
-        player = { x: WORLD_W/2, y: WORLD_H/2, vx:0, vy:0, angle:0, thrust:0, dead:false };
-        playerBullets = [];
-        enemyBullets  = [];
-        score = 0;
-        shootCool = 0;
-        entities = [
-            ...Array.from({length: N_CIRCLES},  mkCircle),
-            ...Array.from({length: N_SHOOTERS}, mkShooter),
-            ...Array.from({length: N_TANKS},    mkTank),
-        ];
-    }
-
-    function restart() {
-        initGame();
-        document.getElementById('restartBtn').style.display = 'none';
-    }
-
-    // ── Networking ────────────────────────────────────────────────────────
-
-    function setConnStatus(state, text) {
-        netState = state;
-        const el = document.getElementById('connStatus');
-        el.textContent = text;
-        el.style.color = state === 'connected'  ? '#7fdc8f'
-                        : state === 'connecting' ? '#e0c060'
-                        : state === 'error'      ? '#e07070'
-                        :                           '#888';
-    }
-
-    function wsUrlGuess() {
-        // Default relay port for ws_server.py is 8765. Assume it runs on
-        // the same host that served this page (works for both plain HTTP
-        // and HTTPS — wss:// is used automatically when the page is
-        // loaded over https:).
-        const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const host = location.hostname || 'localhost';
-        return `${proto}//${host}:8765`;
-    }
-
-    function connectMultiplayer(url) {
-        if (ws) { try { ws.close(); } catch (e) {} }
-        setConnStatus('connecting', 'Connecting...');
-        try {
-            ws = new WebSocket(url);
-        } catch (e) {
-            setConnStatus('error', 'Connection failed');
-            return;
-        }
-
-        ws.onopen = () => {
-            setConnStatus('connected', 'Connected');
-            ws.send(JSON.stringify({ type: 'join', id: MY_ID, name: myName }));
-        };
-
-        ws.onmessage = (ev) => {
-            let msg;
-            try { msg = JSON.parse(ev.data); } catch (e) { return; }
-            handleNetMessage(msg);
-        };
-
-        ws.onerror = () => { setConnStatus('error', 'Connection error'); };
-
-        ws.onclose = () => {
-            if (netState !== 'error') setConnStatus('offline', 'Offline (single player)');
-            // Immediately restore host authority so shooter AI and entity
-            // simulation resume without waiting for the stale-prune cycle.
-            for (const id of [...allKnownIds]) {
-                if (id !== MY_ID) allKnownIds.delete(id);
-            }
-            for (const id in remotePlayers) delete remotePlayers[id];
-            reelectHost();
-            updatePlayerCount();
-        };
-    }
-
-    function handleNetMessage(msg) {
-        if (!msg || !msg.type) return;
-
-        if (msg.type === 'roster') {
-            (msg.players || []).forEach(p => {
-                if (p.id === MY_ID) return;
-                allKnownIds.add(p.id);
-                upsertRemote(p.id, p.name, p.state);
-            });
-            reelectHost();
-            updatePlayerCount();
-            return;
-        }
-
-        if (msg.type === 'player_joined') {
-            if (msg.id === MY_ID) return;
-            allKnownIds.add(msg.id);
-            reelectHost();
-            if (!remotePlayers[msg.id]) {
-                remotePlayers[msg.id] = {
-                    x: WORLD_W / 2, y: WORLD_H / 2, angle: 0,
-                    dead: false, name: msg.name || msg.id.slice(0, 6),
-                    lastUpdate: performance.now() / 1000,
-                };
-            }
-            updatePlayerCount();
-            return;
-        }
-
-        if (msg.type === 'player_left') {
-            allKnownIds.delete(msg.id);
-            reelectHost();
-            delete remotePlayers[msg.id];
-            updatePlayerCount();
-            return;
-        }
-
-        if (msg.type === 'state') {
-            if (msg.id === MY_ID) return;
-            if (!allKnownIds.has(msg.id)) {
-                allKnownIds.add(msg.id);
-                reelectHost();   // a previously-unknown peer appeared; re-check who is host
-            }
-            upsertRemote(msg.id, msg.name, msg);
-            return;
-        }
-
-        if (msg.type === 'shoot') {
-            if (msg.id === MY_ID) return;
-            remoteBullets.push({ x: msg.x, y: msg.y, vx: msg.vx, vy: msg.vy, life: 2.2 });
-            return;
-        }
-
-        // ── Entity sync messages ──────────────────────────────────────────
-        if (msg.type === 'enemies') {
-            // Only non-hosts apply host's entity state
-            if (msg.id === MY_ID || isHost) return;
-            applyHostEntities(msg.entities || []);
-            return;
-        }
-
-        if (msg.type === 'hit') {
-            // Only the host processes incoming hit reports from non-hosts
-            if (!isHost || msg.id === MY_ID) return;
-            const idx = msg.idx;
-            if (idx < 0 || idx >= entities.length) return;
-            const e = entities[idx];
-            // Reject stale hits: if gen doesn't match, this hit targeted an
-            // entity that has already been replaced (respawned); discard it.
-            if (msg.gen !== undefined && e.gen !== msg.gen) return;
-            e.hp = Math.max(0, e.hp - 1);
-            e.hitFlash = 0.18;
-            if (e.hp <= 0) {
-                const replacement = e.kind === 'circle'  ? mkCircle()
-                                  : e.kind === 'shooter' ? mkShooter()
-                                  :                        mkTank();
-                entities.splice(idx, 1, replacement);
-            }
-            return;
-        }
-    }
-
-    function upsertRemote(id, name, state) {
-        if (!state) return;
-        const existed = !!remotePlayers[id];
-        remotePlayers[id] = {
-            x: state.x, y: state.y, angle: state.angle || 0,
-            dead: !!state.dead,
-            name: name || (remotePlayers[id] && remotePlayers[id].name) || id.slice(0, 6),
-            lastUpdate: performance.now() / 1000,
-        };
-        if (!existed) updatePlayerCount();
-    }
-
-    function updatePlayerCount() {
-        const n = Object.keys(remotePlayers).length;
-        document.getElementById('playerCount').textContent =
-            n > 0 ? ` · ${n} other pilot${n === 1 ? '' : 's'} online` : '';
-    }
-
-    function pruneStaleRemotes() {
-        const now = performance.now() / 1000;
-        let changed = false;
-        for (const id in remotePlayers) {
-            if (now - remotePlayers[id].lastUpdate > REMOTE_TIMEOUT) {
-                allKnownIds.delete(id);
-                delete remotePlayers[id];
-                changed = true;
-            }
-        }
-        if (changed) { reelectHost(); updatePlayerCount(); }
-    }
-
-    // ── Entity sync helpers ───────────────────────────────────────────────
-
-    /** Serialize entity array into a compact JSON-safe form for network send. */
-    function serializeEntities() {
-        return entities.map(e => {
-            const d = {
-                kind: e.kind,
-                gen:  e.gen,   // generation counter — used to validate hit messages
-                x: Math.round(e.x * 10) / 10,
-                y: Math.round(e.y * 10) / 10,
-                vx: Math.round(e.vx * 10) / 10,
-                vy: Math.round(e.vy * 10) / 10,
-                r: e.r,
-                hp: e.hp,
-                maxHp: e.maxHp,
-                pts: e.pts,
-            };
-            if (e.kind === 'shooter') {
-                d.angle    = Math.round(e.angle * 1000) / 1000;
-                d.fireCool = Math.round(e.fireCool * 100) / 100;
-            }
-            return d;
-        });
-    }
-
-    /**
-     * Apply entity state received from the host.
-     * - Replaces entities whose kind changed (respawned enemies).
-     * - Updates position/velocity/hp for entities of the same kind.
-     * - Preserves local hitFlash so visual feedback isn't clobbered.
-     */
-    function applyHostEntities(hostEntities) {
-        if (!Array.isArray(hostEntities) || hostEntities.length === 0) return;
-
-        // Guard: skip malformed entries that lack the minimum required fields
-        const VALID_KINDS = new Set(['circle', 'shooter', 'tank']);
-        const valid = hostEntities.every(he =>
-            he && VALID_KINDS.has(he.kind) && typeof he.gen === 'number' &&
-            typeof he.x === 'number' && typeof he.y === 'number'
-        );
-        if (!valid) return;
-
-        // If the list length changed (shouldn't happen but be safe), rebuild
-        if (hostEntities.length !== entities.length) {
-            entities = hostEntities.map(he => {
-                const e = he.kind === 'circle'  ? mkCircle()
-                        : he.kind === 'shooter' ? mkShooter()
-                        :                         mkTank();
-                Object.assign(e, he);
-                e.hitFlash = 0;
-                return e;
-            });
-            return;
-        }
-
-        for (let i = 0; i < entities.length; i++) {
-            const e  = entities[i];
-            const he = hostEntities[i];
-            if (e.gen !== he.gen) {
-                // Generation mismatch: entity was replaced on the host.
-                // Build a fresh local copy from the host's data so factories
-                // don't overwrite any fields that the host already set.
-                const ne = he.kind === 'circle'  ? mkCircle()
-                         : he.kind === 'shooter' ? mkShooter()
-                         :                         mkTank();
-                Object.assign(ne, he);          // host values win
-                ne.gen      = he.gen;           // carry over host gen exactly
-                ne.hitFlash = 0.15;             // brief flash so the swap is visible
-                entities[i] = ne;
-            } else {
-                // Same entity: sync position, velocity, hp from host.
-                e.x  = he.x;  e.y  = he.y;
-                e.vx = he.vx; e.vy = he.vy;
-                // Trigger hit flash when host records damage we didn't see locally
-                if (he.hp < e.hp) { e.hp = he.hp; e.hitFlash = 0.15; }
-                else               { e.hp = he.hp; }
-                if (he.angle    !== undefined) e.angle    = he.angle;
-                if (he.fireCool !== undefined) e.fireCool = he.fireCool;
-            }
-        }
-    }
-
-    /** Host: broadcast entity state to all peers. */
-    function sendNetEntities(dt) {
-        if (!ws || ws.readyState !== WebSocket.OPEN || !isHost) return;
-        entitySendAccum += dt;
-        if (entitySendAccum < 1 / ENTITY_SEND_HZ) return;
-        entitySendAccum = 0;
-        ws.send(JSON.stringify({ type: 'enemies', id: MY_ID, entities: serializeEntities() }));
-    }
-
-    /** Non-host: report a bullet hit on entity at index idx to the host.
-     *  Includes the entity's gen so the host can reject stale hits. */
-    function sendHit(idx) {
-        if (!ws || ws.readyState !== WebSocket.OPEN || isHost) return;
-        const gen = entities[idx] ? entities[idx].gen : -1;
-        ws.send(JSON.stringify({ type: 'hit', id: MY_ID, idx, gen }));
-    }
-
-    function sendNetState(dt) {
-        if (!ws || ws.readyState !== WebSocket.OPEN) return;
-        stateSendAccum += dt;
-        if (stateSendAccum < 1 / STATE_SEND_HZ) return;
-        stateSendAccum = 0;
-        ws.send(JSON.stringify({
-            type: 'state', id: MY_ID, name: myName,
-            x: player.x, y: player.y, angle: player.angle,
-            vx: player.vx, vy: player.vy, dead: player.dead,
-        }));
-    }
-
-    function sendNetShoot(b) {
-        if (!ws || ws.readyState !== WebSocket.OPEN) return;
-        ws.send(JSON.stringify({ type: 'shoot', id: MY_ID, x: b.x, y: b.y, vx: b.vx, vy: b.vy }));
-    }
-
-    // Try to connect automatically on load; falls back to single-player
-    // seamlessly if no relay (ws_server.py) is reachable.
-    connectMultiplayer(wsUrlGuess());
-
-    window.addEventListener('beforeunload', () => {
-        if (ws && ws.readyState === WebSocket.OPEN) {
-            try { ws.send(JSON.stringify({ type: 'leave', id: MY_ID })); } catch (e) {}
-        }
     });
+}
+function applyHostEntities(hostEntities){
+    if(!Array.isArray(hostEntities)||!hostEntities.length)return;
+    const VK=new Set(['circle','shooter','tank']);
+    if(!hostEntities.every(he=>he&&VK.has(he.kind)&&typeof he.gen==='number'&&typeof he.x==='number'))return;
+    if(hostEntities.length!==entities.length){
+        entities=hostEntities.map(he=>{const e=he.kind==='circle'?mkCircle():he.kind==='shooter'?mkShooter():mkTank();Object.assign(e,he);e.hitFlash=0;return e;});return;
+    }
+    for(let i=0;i<entities.length;i++){
+        const e=entities[i],he=hostEntities[i];
+        if(e.gen!==he.gen){const ne=he.kind==='circle'?mkCircle():he.kind==='shooter'?mkShooter():mkTank();Object.assign(ne,he);ne.gen=he.gen;ne.hitFlash=0.15;entities[i]=ne;}
+        else{e.x=he.x;e.y=he.y;e.vx=he.vx;e.vy=he.vy;e.angle=he.angle||e.angle;if(he.hp<e.hp){e.hp=he.hp;e.hitFlash=0.15;}else{e.hp=he.hp;}if(he.fireCool!==undefined)e.fireCool=he.fireCool;}
+    }
+}
+function sendNetEntities(dt){
+    if(!ws||ws.readyState!==WebSocket.OPEN||!isHost)return;
+    entitySendAccum+=dt;if(entitySendAccum<1/ENTITY_SEND_HZ)return;
+    entitySendAccum=0;ws.send(JSON.stringify({type:'enemies',id:MY_ID,entities:serializeEntities()}));
+}
+function sendHit(idx,gen){if(!ws||ws.readyState!==WebSocket.OPEN||isHost)return;ws.send(JSON.stringify({type:'hit',id:MY_ID,idx,gen}));}
+function sendNetState(dt){
+    if(!ws||ws.readyState!==WebSocket.OPEN)return;
+    stateSendAccum+=dt;if(stateSendAccum<1/STATE_SEND_HZ)return;
+    stateSendAccum=0;ws.send(JSON.stringify({type:'state',id:MY_ID,name:myName,x:player.x,y:player.y,angle:player.angle,vx:player.vx,vy:player.vy,dead:player.dead}));
+}
+function sendNetShoot(b){if(!ws||ws.readyState!==WebSocket.OPEN)return;ws.send(JSON.stringify({type:'shoot',id:MY_ID,x:b.x,y:b.y,vx:b.vx,vy:b.vy}));}
+connectMultiplayer(wsUrlGuess());
+window.addEventListener('beforeunload',()=>{if(ws?.readyState===WebSocket.OPEN)try{ws.send(JSON.stringify({type:'leave',id:MY_ID}));}catch(e){}});
 
-    // ── Input ─────────────────────────────────────────────────────────────
+// ── Scroll zoom ────────────────────────────────────────────────────────────
+canvas.addEventListener('wheel',e=>{
+    e.preventDefault();
+    zoomLevel=Math.max(MIN_ZOOM,Math.min(MAX_ZOOM,zoomLevel+(e.deltaY>0?-1:1)*ZOOM_STEP));
+    recalcView();
+    const sl=document.getElementById('sZoom');
+    if(sl){sl.value=zoomLevel;document.getElementById('sZoomVal').textContent=zoomLevel.toFixed(2)+'×';}
+},{passive:false});
 
-    const joystickEl = document.getElementById('joystick');
-    joystickEl.addEventListener('touchstart', e => updateJoy(e.touches[0]));
-    joystickEl.addEventListener('touchmove',  e => updateJoy(e.touches[0]));
-    joystickEl.addEventListener('touchend',   () => { touch.left = touch.right = 0; });
-    function updateJoy(t) {
-        const r = joystickEl.getBoundingClientRect();
-        const dx = t.clientX - (r.left + r.width/2);
-        const dy = t.clientY - (r.top  + r.height/2);
-        if (Math.hypot(dx, dy) > r.width * 0.15) {
-            const a = Math.atan2(dy, dx);
-            touch.left = Math.cos(a); touch.right = Math.sin(a);
+// ── Input ──────────────────────────────────────────────────────────────────
+const joystickEl=document.getElementById('joystick');
+joystickEl.addEventListener('touchstart',e=>updateJoy(e.touches[0]));
+joystickEl.addEventListener('touchmove', e=>updateJoy(e.touches[0]));
+joystickEl.addEventListener('touchend',  ()=>{touch.left=touch.right=0;});
+function updateJoy(t){
+    const r=joystickEl.getBoundingClientRect();
+    const dx=t.clientX-(r.left+r.width/2),dy=t.clientY-(r.top+r.height/2);
+    if(Math.hypot(dx,dy)>r.width*0.15){const a=Math.atan2(dy,dx);touch.left=Math.cos(a);touch.right=Math.sin(a);}
+}
+document.getElementById('thrustBtn').addEventListener('touchstart',()=>{touch.thrust=true;});
+document.getElementById('thrustBtn').addEventListener('touchend',  ()=>{touch.thrust=false;});
+document.getElementById('shootBtn').addEventListener('touchstart',e=>{e.preventDefault();touch.shoot=true;});
+document.getElementById('shootBtn').addEventListener('touchend',  e=>{e.preventDefault();touch.shoot=false;});
+document.getElementById('restartBtn').addEventListener('touchstart',()=>{if(player.dead)restart();});
+window.addEventListener('keydown',e=>{keys[e.key]=true;if((e.key==='r'||e.key==='R')&&player.dead)restart();if(e.key==='Escape')closeSettings();});
+window.addEventListener('keyup',e=>{keys[e.key]=false;});
+
+// ── Utility ────────────────────────────────────────────────────────────────
+function wrapPos(obj){obj.x=((obj.x%WORLD_W)+WORLD_W)%WORLD_W;obj.y=((obj.y%WORLD_H)+WORLD_H)%WORLD_H;}
+function nearestEntity(x,y){
+    let best=null,bestD=Infinity;
+    for(const e of entities){const d=Math.hypot(wrapDelta(x,e.x,WORLD_W),wrapDelta(y,e.y,WORLD_H));if(d<bestD){bestD=d;best=e;}}
+    return best;
+}
+function normAngleDiff(da){return((da+Math.PI)%(Math.PI*2)+Math.PI*2)%(Math.PI*2)-Math.PI;}
+
+// ── Enemy AI update ────────────────────────────────────────────────────────
+// Finds closest player target among local player + remote players
+function closestTarget(ex,ey){
+    let bestDist=Infinity, bestTx=0, bestTy=0;
+    const check=(tx,ty)=>{const dx=wrapDelta(ex,tx,WORLD_W),dy=wrapDelta(ey,ty,WORLD_H),d=Math.hypot(dx,dy);if(d<bestDist){bestDist=d;bestTx=dx;bestTy=dy;}};
+    if(!player.dead)check(player.x,player.y);
+    for(const id in remotePlayers){const rp=remotePlayers[id];if(!rp.dead)check(rp.x,rp.y);}
+    return{tx:bestTx,ty:bestTy,dist:bestDist};
+}
+
+function updateEnemyAI(e,dt,sf){
+    const {tx,ty,dist}=closestTarget(e.x,e.y);
+    const inRange=dist<e.viewRadius;
+
+    // ── Choose steering direction ──
+    let steerAngle;
+    if(inRange){
+        if(e.kind==='shooter'&&dist<e.preferDist){
+            // Retreat: angle away from player
+            steerAngle=Math.atan2(ty,tx)+Math.PI;
+        } else {
+            steerAngle=Math.atan2(ty,tx);
         }
-    }
-    document.getElementById('thrustBtn').addEventListener('touchstart', () => { touch.thrust = true; });
-    document.getElementById('thrustBtn').addEventListener('touchend',   () => { touch.thrust = false; });
-    document.getElementById('shootBtn').addEventListener('touchstart', e => { e.preventDefault(); touch.shoot = true; });
-    document.getElementById('shootBtn').addEventListener('touchend',   e => { e.preventDefault(); touch.shoot = false; });
-    document.getElementById('restartBtn').addEventListener('touchstart', () => { if (player.dead) restart(); });
-    window.addEventListener('keydown', e => {
-        keys[e.key] = true;
-        if ((e.key === 'r' || e.key === 'R') && player.dead) restart();
-    });
-    window.addEventListener('keyup', e => { keys[e.key] = false; });
-
-    // ── Update ────────────────────────────────────────────────────────────
-
-    function wrapPos(obj) {
-        obj.x = ((obj.x % WORLD_W) + WORLD_W) % WORLD_W;
-        obj.y = ((obj.y % WORLD_H) + WORLD_H) % WORLD_H;
+    } else {
+        // Wander
+        e.wanderTimer-=dt;
+        if(e.wanderTimer<=0){
+            e.wanderAngle+=normAngleDiff((Math.random()-0.5)*Math.PI*1.4);
+            e.wanderTimer=1.5+Math.random()*2.5;
+        }
+        steerAngle=e.wanderAngle;
     }
 
-    function update(dt) {
-        // — Player input —
-        player.thrust = 0;
-        if (keys['ArrowUp']  || keys['w'] || keys['W'] || touch.thrust)       player.thrust = 200;
-        if (keys['ArrowLeft']  || keys['a'] || keys['A'] || touch.left < -0.5) player.angle -= 3 * dt;
-        if (keys['ArrowRight'] || keys['d'] || keys['D'] || touch.left >  0.5) player.angle += 3 * dt;
+    // ── Obstacle avoidance — override steer if wall ahead ──
+    const rep=obsRepulsion(e.x,e.y);
+    if(rep.fx*rep.fx+rep.fy*rep.fy>400){
+        // Blend avoidance with desired direction (avoidance dominates close to wall)
+        const repMag=Math.hypot(rep.fx,rep.fy);
+        const repStr=Math.min(1,(repMag-20)/200);
+        const desireX=(1-repStr)*Math.cos(steerAngle)+repStr*(rep.fx/repMag);
+        const desireY=(1-repStr)*Math.sin(steerAngle)+repStr*(rep.fy/repMag);
+        steerAngle=Math.atan2(desireY,desireX);
+    }
 
-        shootCool -= dt;
-        if ((keys[' '] || keys['Space'] || touch.shoot) && shootCool <= 0 && !player.dead) {
-            shootCool = 0.15;
-            const sp = 400;
-            const b = {
-                x: player.x + Math.cos(player.angle) * 16,
-                y: player.y + Math.sin(player.angle) * 16,
-                vx: player.vx + Math.cos(player.angle) * sp,
-                vy: player.vy + Math.sin(player.angle) * sp,
-                life: 2.2,
-            };
+    // ── Rotate toward steer angle ──
+    const da=normAngleDiff(steerAngle-e.angle);
+    e.angle+=Math.sign(da)*Math.min(Math.abs(da),e.turnRate*dt);
+
+    // ── Apply thrust ──
+    const thrustStr=(inRange?1.0:0.25)*sf;
+    e.vx+=Math.cos(e.angle)*e.thrustForce*thrustStr*dt;
+    e.vy+=Math.sin(e.angle)*e.thrustForce*thrustStr*dt;
+
+    // ── Speed cap ──
+    const maxSpd=e.maxSpeed*sf;
+    const spd=Math.hypot(e.vx,e.vy);
+    if(spd>maxSpd){e.vx=e.vx/spd*maxSpd;e.vy=e.vy/spd*maxSpd;}
+
+    // ── Drag ──
+    e.vx*=e.drag; e.vy*=e.drag;
+
+    // ── Move + obstacle resolve ──
+    e.x+=e.vx*dt; e.y+=e.vy*dt;
+    wrapPos(e);
+    resolveObstacles(e,e.r);
+}
+
+// ── Update ─────────────────────────────────────────────────────────────────
+function update(dt){
+    tickEffects(dt); tickToasts(dt);
+
+    // — Turn —
+    if(turnMode==='mouse'){
+        const ta=Math.atan2(mouseY-canvas.height/2,mouseX-canvas.width/2);
+        const da=normAngleDiff(ta-player.angle);
+        player.angle+=Math.sign(da)*Math.min(Math.abs(da),sensitivity*2.5*dt);
+    } else {
+        if(keys['ArrowLeft']||keys['a']||keys['A']||touch.left<-0.5)  player.angle-=sensitivity*dt;
+        if(keys['ArrowRight']||keys['d']||keys['D']||touch.left>0.5)  player.angle+=sensitivity*dt;
+    }
+
+    // — Thrust —
+    player.thrust=0;
+    if(keys['ArrowUp']||keys['w']||keys['W']||touch.thrust) player.thrust=effectiveThrust();
+
+    // — Shoot —
+    shootCool-=dt;
+    if((keys[' ']||keys['Space']||touch.shoot)&&shootCool<=0&&!player.dead){
+        shootCool=effectiveShootCool();
+        const sp=effectiveBulletSpd(), cnt=bulletCount(), spread=cnt>1?0.18:0;
+        for(let s=0;s<cnt;s++){
+            const ba=player.angle+(s-Math.floor(cnt/2))*spread;
+            const b={x:player.x+Math.cos(player.angle)*16,y:player.y+Math.sin(player.angle)*16,
+                vx:player.vx+Math.cos(ba)*sp,vy:player.vy+Math.sin(ba)*sp,
+                life:2.2,homing:hasEffect('homing'),r:effectiveBulletR(),dmg:effectiveBulletDmg()};
             playerBullets.push(b);
-            sendNetShoot(b);
+            if(s===0)sendNetShoot(b);
         }
-
-        // — Player physics —
-        if (!player.dead) {
-            player.vx += Math.cos(player.angle) * player.thrust * dt;
-            player.vy += Math.sin(player.angle) * player.thrust * dt;
-            player.vx *= 0.995; player.vy *= 0.995;
-            player.x += player.vx * dt; player.y += player.vy * dt;
-            wrapPos(player);
-        }
-
-        // — Player bullets —
-        playerBullets = playerBullets.filter(b => {
-            b.x += b.vx * dt; b.y += b.vy * dt;
-            b.life -= dt; wrapPos(b);
-            return b.life > 0;
-        });
-
-        // — Enemy bullets —
-        enemyBullets = enemyBullets.filter(b => {
-            b.x += b.vx * dt; b.y += b.vy * dt;
-            b.life -= dt; wrapPos(b);
-            return b.life > 0;
-        });
-
-        // — Entities —
-        // canSee: true when the entity is within the player's visible viewport.
-        // Uses wrap-aware deltas so entities near world edges work correctly.
-        const canSee = (e) => {
-            const dx = Math.abs(wrapDelta(e.x, player.x, WORLD_W));
-            const dy = Math.abs(wrapDelta(e.y, player.y, WORLD_H));
-            return dx <= VIEW_W / 2 && dy <= VIEW_H / 2;
-        };
-
-        for (const e of entities) {
-            e.x += e.vx * dt; e.y += e.vy * dt;
-            wrapPos(e);
-            if (e.hitFlash > 0) e.hitFlash -= dt;
-
-            if (e.kind === 'shooter') {
-                const visible = canSee(e);
-
-                // Only the host runs the shooter AI (aiming + firing).
-                // Non-hosts just advance position/hitFlash (done above) so
-                // the entity looks smooth between host syncs; they do NOT
-                // spawn enemy bullets — those are purely cosmetic and each
-                // client manages its own copy of enemyBullets for danger feedback.
-                if (isHost) {
-                    // Aim at the player when visible
-                    if (visible) {
-                        const tdx = wrapDelta(e.x, player.x, WORLD_W);
-                        const tdy = wrapDelta(e.y, player.y, WORLD_H);
-                        const targetAng = Math.atan2(tdy, tdx);
-                        let da = targetAng - e.angle;
-                        da = ((da + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
-                        e.angle += Math.sign(da) * Math.min(Math.abs(da), 1.2 * dt);
-                    }
-
-                    // Cooldown always ticks; only fires when visible
-                    e.fireCool -= dt;
-                    if (e.fireCool <= 0 && visible && !player.dead) {
-                        e.fireCool = 3 + Math.random() * 2;
-                        const sp = 120;
-                        enemyBullets.push({
-                            x: e.x + Math.cos(e.angle) * (e.r + 4),
-                            y: e.y + Math.sin(e.angle) * (e.r + 4),
-                            vx: Math.cos(e.angle) * sp,
-                            vy: Math.sin(e.angle) * sp,
-                            life: 5,
-                        });
-                    }
-                }
-            }
-        }
-
-        // — Player vs enemy body collision —
-        if (!player.dead) {
-            for (const e of entities) {
-                if (Math.hypot(player.x - e.x, player.y - e.y) < e.r + 8) {
-                    player.dead = true;
-                    document.getElementById('restartBtn').style.display = 'block';
-                    break;
-                }
-            }
-        }
-
-        // — Player vs enemy bullets —
-        if (!player.dead) {
-            for (const b of enemyBullets) {
-                if (Math.hypot(player.x - b.x, player.y - b.y) < 10) {
-                    player.dead = true;
-                    document.getElementById('restartBtn').style.display = 'block';
-                    break;
-                }
-            }
-        }
-
-        // — Player bullets vs entities (hp-based damage, host-authoritative) ——
-        //
-        // HOST: runs the authoritative simulation — kills entities, respawns
-        //   them, and the result is broadcast to all peers via sendNetEntities.
-        //
-        // NON-HOST: optimistically applies damage locally for instant feedback,
-        //   then reports the hit to the host via sendHit().  The host's next
-        //   entity sync (≤1/12 s later) will be the ground truth — if the host
-        //   also processes the hit the entity will simply not be there in the
-        //   next sync and the local replacement is already in place.
-        for (const b of playerBullets) {
-            for (let i = 0; i < entities.length; i++) {
-                const e = entities[i];
-                if (Math.hypot(b.x - e.x, b.y - e.y) < e.r) {
-                    // Capture gen BEFORE any local kill/splice so the host
-                    // message targets the correct entity generation.
-                    const hitGen = e.gen;
-                    e.hp -= 1;
-                    e.hitFlash = 0.15;
-                    playerBullets = playerBullets.filter(x => x !== b);
-
-                    if (e.hp <= 0) {
-                        score += e.pts;
-                        const replacement = e.kind === 'circle'  ? mkCircle()
-                                          : e.kind === 'shooter' ? mkShooter()
-                                          :                        mkTank();
-                        entities.splice(i, 1, replacement);
-                        // Notify host AFTER local splice, using saved gen
-                        // (sendHit uses entities[idx].gen which is now the replacement;
-                        //  that's why we bypass it and send the captured hitGen directly)
-                        if (!isHost && ws && ws.readyState === WebSocket.OPEN)
-                            ws.send(JSON.stringify({ type: 'hit', id: MY_ID, idx: i, gen: hitGen }));
-                    } else {
-                        // Partial hit — entity still alive; sendHit helper is fine here
-                        sendHit(i);
-                    }
-                    break;
-                }
-            }
-        }
-
-        // — Remote players' bullets (cosmetic only — don't damage entities
-        //   or kill the local player; each client resolves its own combat) —
-        remoteBullets = remoteBullets.filter(b => {
-            b.x += b.vx * dt; b.y += b.vy * dt;
-            b.life -= dt; wrapPos(b);
-            return b.life > 0;
-        });
-
-        sendNetState(dt);
-        sendNetEntities(dt);   // host-only; no-op for non-hosts
-        pruneStaleRemotes();
     }
 
-    // ── Draw ──────────────────────────────────────────────────────────────
+    // — Player physics —
+    if(!player.dead){
+        player.vx+=Math.cos(player.angle)*player.thrust*dt;
+        player.vy+=Math.sin(player.angle)*player.thrust*dt;
+        player.vx*=0.995; player.vy*=0.995;
+        player.x+=player.vx*dt; player.y+=player.vy*dt;
+        wrapPos(player);
+        resolveObstacles(player,10);
+    }
 
-    function draw() {
-        const scx = canvas.width  / VIEW_W;
-        const scy = canvas.height / VIEW_H;
-        const camX = player.x, camY = player.y;
-
-        function w2s(wx, wy) {
-            return [
-                (VIEW_W/2 + wrapDelta(camX, wx, WORLD_W)) * scx,
-                (VIEW_H/2 + wrapDelta(camY, wy, WORLD_H)) * scy,
-            ];
+    // — Player bullets (homing) —
+    playerBullets=playerBullets.filter(b=>{
+        if(b.homing){
+            const tgt=nearestEntity(b.x,b.y);
+            if(tgt){
+                const ta=Math.atan2(wrapDelta(b.y,tgt.y,WORLD_H),wrapDelta(b.x,tgt.x,WORLD_W));
+                const spd=Math.hypot(b.vx,b.vy);
+                const na=Math.atan2(b.vy,b.vx)+Math.sign(normAngleDiff(ta-Math.atan2(b.vy,b.vx)))*Math.min(Math.abs(normAngleDiff(ta-Math.atan2(b.vy,b.vx))),3.5*dt);
+                b.vx=Math.cos(na)*spd; b.vy=Math.sin(na)*spd;
+            }
         }
-        function onScreen(sx, sy, pad=60) {
-            return sx > -pad && sx < canvas.width+pad && sy > -pad && sy < canvas.height+pad;
+        b.x+=b.vx*dt; b.y+=b.vy*dt; b.life-=dt; wrapPos(b);
+        // Bullet hits obstacle
+        for(const obs of obstacles){if(circleHitsObs(b.x,b.y,b.r||3,obs))return false;}
+        return b.life>0;
+    });
+
+    enemyBullets=enemyBullets.filter(b=>{
+        b.x+=b.vx*dt; b.y+=b.vy*dt; b.life-=dt; wrapPos(b);
+        for(const obs of obstacles){if(circleHitsObs(b.x,b.y,4,obs))return false;}
+        return b.life>0;
+    });
+
+    // — Enemy AI (host only) —
+    const sf=slowFactor();
+    if(isHost){
+        for(const e of entities){
+            if(e.hitFlash>0)e.hitFlash-=dt;
+            updateEnemyAI(e,dt,sf);
+
+            // Shooter fires
+            if(e.kind==='shooter'){
+                e.fireCool-=dt;
+                const {dist}=closestTarget(e.x,e.y);
+                if(e.fireCool<=0&&dist<e.viewRadius&&!player.dead){
+                    e.fireCool=3+Math.random()*2;
+                    enemyBullets.push({x:e.x+Math.cos(e.angle)*(e.r+4),y:e.y+Math.sin(e.angle)*(e.r+4),vx:Math.cos(e.angle)*120,vy:Math.sin(e.angle)*120,life:5});
+                }
+            }
         }
+    } else {
+        // Non-host: just tick hitFlash
+        for(const e of entities)if(e.hitFlash>0)e.hitFlash-=dt;
+    }
 
-        // Background
-        ctx.fillStyle = '#0c0c18';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // — Power cube respawn —
+    for(const c of powerCubes){
+        c.pulse+=dt*2.5;
+        if(!c.active&&c.respawnTimer>0){
+            c.respawnTimer-=dt;
+            if(c.respawnTimer<=0){const f=mkCube();c.kind=f.kind;c.x=f.x;c.y=f.y;c.pulse=f.pulse;c.active=true;}
+        }
+    }
 
-        // Grid
-        ctx.strokeStyle = 'rgba(255,255,255,0.04)';
-        ctx.lineWidth = 1;
+    // — Player vs power cubes —
+    if(!player.dead){
+        for(const c of powerCubes){
+            if(!c.active)continue;
+            if(Math.hypot(player.x-c.x,player.y-c.y)<c.r+10){c.active=false;c.respawnTimer=18+Math.random()*8;applyEffect(c.kind);}
+        }
+    }
+
+    // — Player collisions —
+    if(!player.dead&&!isGhost()){
+        for(const e of entities){
+            if(Math.hypot(player.x-e.x,player.y-e.y)<e.r+8){
+                if(hasEffect('shield')){delete activeEffects['shield'];showToast('🛡 Shield Broken!','#4488ff');}
+                else{player.dead=true;document.getElementById('restartBtn').style.display='block';}
+                break;
+            }
+        }
+    }
+    if(!player.dead&&!isGhost()){
+        for(const b of enemyBullets){
+            if(Math.hypot(player.x-b.x,player.y-b.y)<10){
+                if(hasEffect('shield')){delete activeEffects['shield'];showToast('🛡 Shield Broken!','#4488ff');}
+                else{player.dead=true;document.getElementById('restartBtn').style.display='block';}
+                break;
+            }
+        }
+    }
+
+    // — Player bullets vs entities —
+    for(const b of playerBullets){
+        for(let i=0;i<entities.length;i++){
+            const e=entities[i];
+            if(Math.hypot(b.x-e.x,b.y-e.y)<e.r+(b.r||3)-3){
+                const hitGen=e.gen;
+                e.hp=Math.max(0,e.hp-(b.dmg||1)); e.hitFlash=0.15;
+                playerBullets=playerBullets.filter(x=>x!==b);
+                if(e.hp<=0){
+                    score+=e.pts*scoreMultiplier();
+                    entities.splice(i,1,e.kind==='circle'?mkCircle():e.kind==='shooter'?mkShooter():mkTank());
+                    if(!isHost)sendHit(i,hitGen);
+                } else {
+                    if(!isHost)sendHit(i,hitGen);
+                }
+                break;
+            }
+        }
+    }
+
+    // — Remote bullets —
+    remoteBullets=remoteBullets.filter(b=>{b.x+=b.vx*dt;b.y+=b.vy*dt;b.life-=dt;wrapPos(b);return b.life>0;});
+
+    sendNetState(dt);
+    sendNetEntities(dt);
+    pruneStaleRemotes();
+    updateEffectsBar();
+}
+
+// ── Effects bar UI ─────────────────────────────────────────────────────────
+function updateEffectsBar(){
+    const bar=document.getElementById('effectsBar'); bar.innerHTML='';
+    for(const[name,tl]of Object.entries(activeEffects)){
+        const def=POWERUP_DEFS[name],chip=document.createElement('div');
+        chip.className='eff-chip'; chip.style.color=def.color; chip.style.background=def.bg; chip.style.borderColor=def.color+'55';
+        chip.textContent=`${def.label} ${tl.toFixed(1)}s`; bar.appendChild(chip);
+    }
+}
+
+// ── Draw ───────────────────────────────────────────────────────────────────
+function draw(){
+    const scx=canvas.width/viewW, scy=canvas.height/viewH;
+    const camX=player.x, camY=player.y;
+    function w2s(wx,wy){return[(viewW/2+wrapDelta(camX,wx,WORLD_W))*scx,(viewH/2+wrapDelta(camY,wy,WORLD_H))*scy];}
+    function onScreen(sx,sy,pad=60){return sx>-pad&&sx<canvas.width+pad&&sy>-pad&&sy<canvas.height+pad;}
+
+    ctx.fillStyle='#080810'; ctx.fillRect(0,0,canvas.width,canvas.height);
+
+    // ── Grid ──
+    ctx.strokeStyle='rgba(255,255,255,0.03)'; ctx.lineWidth=1; ctx.beginPath();
+    const gs=400;
+    for(let gx=Math.floor((camX-viewW/2)/gs)*gs;gx<=camX+viewW/2+gs;gx+=gs){const px=(viewW/2+wrapDelta(camX,gx,WORLD_W))*scx;ctx.moveTo(px,0);ctx.lineTo(px,canvas.height);}
+    for(let gy=Math.floor((camY-viewH/2)/gs)*gs;gy<=camY+viewH/2+gs;gy+=gs){const py=(viewH/2+wrapDelta(camY,gy,WORLD_H))*scy;ctx.moveTo(0,py);ctx.lineTo(canvas.width,py);}
+    ctx.stroke();
+
+    // ── Obstacles (rocky terrain) ──
+    const SHADE_FILLS =['#1a2820','#182422','#1e2a1c'];
+    const SHADE_STROKE=['#2d4a38','#284040','#304a30'];
+    const SHADE_INNER =['rgba(255,255,255,0.04)','rgba(255,255,255,0.03)','rgba(255,255,255,0.05)'];
+    for(const obs of obstacles){
+        const[ox,oy]=w2s(obs.cx,obs.cy);
+        if(!onScreen(ox,oy,obs.r*Math.max(scx,scy)+30))continue;
+        const s=obs.shade||0;
+
+        // Main fill
+        ctx.fillStyle=SHADE_FILLS[s]; ctx.strokeStyle=SHADE_STROKE[s]; ctx.lineWidth=1.5;
         ctx.beginPath();
-        const gs = 400;
-        for (let gx = Math.floor((camX-VIEW_W/2)/gs)*gs; gx <= camX+VIEW_W/2+gs; gx += gs) {
-            const px = (VIEW_W/2 + wrapDelta(camX, gx, WORLD_W)) * scx;
-            ctx.moveTo(px, 0); ctx.lineTo(px, canvas.height);
-        }
-        for (let gy = Math.floor((camY-VIEW_H/2)/gs)*gs; gy <= camY+VIEW_H/2+gs; gy += gs) {
-            const py = (VIEW_H/2 + wrapDelta(camY, gy, WORLD_H)) * scy;
-            ctx.moveTo(0, py); ctx.lineTo(canvas.width, py);
+        const[fx,fy]=w2s(obs.pts[0].x,obs.pts[0].y); ctx.moveTo(fx,fy);
+        for(let i=1;i<obs.pts.length;i++){const[px,py]=w2s(obs.pts[i].x,obs.pts[i].y);ctx.lineTo(px,py);}
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+
+        // Inner highlight (top-left edge lighting)
+        ctx.strokeStyle=SHADE_INNER[s]; ctx.lineWidth=1;
+        ctx.beginPath();
+        for(let i=0;i<obs.pts.length;i++){
+            const pt=obs.pts[i], nx=pt.x-obs.cx, ny=pt.y-obs.cy;
+            if(nx<0&&ny<0){const[px,py]=w2s(pt.x,pt.y);i===0?ctx.moveTo(px,py):ctx.lineTo(px,py);}
         }
         ctx.stroke();
-
-        // ── Entities ──
-        for (const e of entities) {
-            const [ex, ey] = w2s(e.x, e.y);
-            if (!onScreen(ex, ey)) continue;
-
-            // hit-flash: interpolate toward white when recently hit
-            const fl = Math.min(1, Math.max(0, e.hitFlash / 0.15));
-
-            function flashColor(base) {
-                // blend base colour toward white by flash amount
-                const r = parseInt(base.slice(1,3),16);
-                const g = parseInt(base.slice(3,5),16);
-                const b = parseInt(base.slice(5,7),16);
-                const fr = Math.round(r + (255-r)*fl);
-                const fg = Math.round(g + (255-g)*fl);
-                const fb = Math.round(b + (255-b)*fl);
-                return `rgb(${fr},${fg},${fb})`;
-            }
-
-            if (e.kind === 'circle') {
-                ctx.fillStyle = flashColor('#c87878');
-                ctx.beginPath();
-                ctx.arc(ex, ey, e.r * scx, 0, Math.PI * 2);
-                ctx.fill();
-
-            } else if (e.kind === 'shooter') {
-                ctx.fillStyle = flashColor('#f0a050');
-                ctx.strokeStyle = fl > 0.1 ? '#ffffff' : '#ffcc80';
-                ctx.lineWidth = 1;
-                const s = e.r * scx;
-                const h  = [Math.cos(e.angle),       Math.sin(e.angle)];
-                const r  = [Math.cos(e.angle + 2.3), Math.sin(e.angle + 2.3)];
-                const l  = [Math.cos(e.angle - 2.3), Math.sin(e.angle - 2.3)];
-                ctx.beginPath();
-                ctx.moveTo(ex + h[0]*s*1.2, ey + h[1]*s*1.2);
-                ctx.lineTo(ex + r[0]*s*0.9, ey + r[1]*s*0.9);
-                ctx.lineTo(ex + l[0]*s*0.9, ey + l[1]*s*0.9);
-                ctx.closePath();
-                ctx.fill();
-                ctx.stroke();
-
-            } else if (e.kind === 'tank') {
-                ctx.fillStyle = flashColor('#9b59b6');
-                ctx.strokeStyle = fl > 0.1 ? '#ffffff' : '#c39bd3';
-                ctx.lineWidth = 1.5;
-                const s = e.r * scx;
-                ctx.save();
-                ctx.translate(ex, ey);
-                ctx.rotate(Math.PI / 4);
-                ctx.fillRect(-s, -s, s*2, s*2);
-                ctx.strokeRect(-s, -s, s*2, s*2);
-                ctx.restore();
-            }
-
-            // ── Health bar (only when hp < maxHp and maxHp > 1) ──
-            if (e.maxHp > 1 && e.hp < e.maxHp) {
-                const barW = e.r * 2 * scx;
-                const barH = 4 * scx;
-                const bx   = ex - barW / 2;
-                const by   = ey - e.r * scx - 8 * scx;
-                // background
-                ctx.fillStyle = 'rgba(0,0,0,0.6)';
-                ctx.fillRect(bx, by, barW, barH);
-                // filled portion — green → red as hp drops
-                const frac = e.hp / e.maxHp;
-                const hue  = Math.round(frac * 110);   // 110 = green, 0 = red
-                ctx.fillStyle = `hsl(${hue},80%,50%)`;
-                ctx.fillRect(bx, by, barW * frac, barH);
-            }
-        }
-
-        // ── Enemy bullets (red-orange, slightly larger than player bullets) ──
-        ctx.fillStyle = '#ff6040';
-        for (const b of enemyBullets) {
-            const [bx, by] = w2s(b.x, b.y);
-            if (!onScreen(bx, by, 20)) continue;
-            ctx.beginPath();
-            ctx.arc(bx, by, 4 * scx, 0, Math.PI * 2);
-            ctx.fill();
-        }
-
-        // ── Player bullets ──
-        ctx.fillStyle = '#fff078';
-        for (const b of playerBullets) {
-            const [bx, by] = w2s(b.x, b.y);
-            ctx.beginPath();
-            ctx.arc(bx, by, 3 * scx, 0, Math.PI * 2);
-            ctx.fill();
-        }
-
-        // ── Remote players (other people in the same game) ──
-        for (const id in remotePlayers) {
-            const rp = remotePlayers[id];
-            if (rp.dead) continue;
-            const [rx, ry] = w2s(rp.x, rp.y);
-            if (!onScreen(rx, ry)) continue;
-            ctx.fillStyle = '#7fdc8f';
-            const h = [Math.cos(rp.angle), Math.sin(rp.angle)];
-            const r = [Math.cos(rp.angle+2.5), Math.sin(rp.angle+2.5)];
-            const l = [Math.cos(rp.angle-2.5), Math.sin(rp.angle-2.5)];
-            const s = 12 * scx;
-            ctx.beginPath();
-            ctx.moveTo(rx + h[0]*s,     ry + h[1]*s);
-            ctx.lineTo(rx + r[0]*s*0.7, ry + r[1]*s*0.7);
-            ctx.lineTo(rx + l[0]*s*0.7, ry + l[1]*s*0.7);
-            ctx.closePath();
-            ctx.fill();
-            ctx.fillStyle = '#9fe0a8';
-            ctx.font = '11px monospace';
-            ctx.textAlign = 'center';
-            ctx.fillText(rp.name || id.slice(0, 6), rx, ry - 18 * scx);
-        }
-
-        // ── Remote players' bullets (cosmetic, greenish to distinguish) ──
-        ctx.fillStyle = '#90f0a0';
-        for (const b of remoteBullets) {
-            const [bx, by] = w2s(b.x, b.y);
-            if (!onScreen(bx, by, 20)) continue;
-            ctx.beginPath();
-            ctx.arc(bx, by, 3 * scx, 0, Math.PI * 2);
-            ctx.fill();
-        }
-
-        // ── Player ship ──
-        if (!player.dead) {
-            const [px, py] = w2s(player.x, player.y);
-            ctx.fillStyle = '#b4c8ff';
-            const h = [Math.cos(player.angle), Math.sin(player.angle)];
-            const r = [Math.cos(player.angle+2.5), Math.sin(player.angle+2.5)];
-            const l = [Math.cos(player.angle-2.5), Math.sin(player.angle-2.5)];
-            const s = 12 * scx;
-            ctx.beginPath();
-            ctx.moveTo(px + h[0]*s,      py + h[1]*s);
-            ctx.lineTo(px + r[0]*s*0.7,  py + r[1]*s*0.7);
-            ctx.lineTo(px + l[0]*s*0.7,  py + l[1]*s*0.7);
-            ctx.closePath();
-            ctx.fill();
-        }
-
-        // HUD
-        document.getElementById('score').textContent = score;
-        document.getElementById('deadMsg').style.display = player.dead ? 'block' : 'none';
-        // Update host/client role badge next to connection status
-        const roleEl = document.getElementById('roleTag');
-        if (roleEl && netState === 'connected') {
-            roleEl.textContent = isHost ? ' [HOST]' : ' [CLIENT]';
-            roleEl.style.color  = isHost ? '#e0c060' : '#80c0ff';
-        } else if (roleEl) {
-            roleEl.textContent = '';
-        }
-
-        drawMinimap();
     }
 
-    function drawMinimap() {
-        const mw = mm.width, mh = mm.height;
-        const scx = mw / WORLD_W, scy = mh / WORLD_H;
-
-        mctx.fillStyle = 'rgba(10,10,20,0.92)';
-        mctx.fillRect(0, 0, mw, mh);
-
-        // Entities — colour-coded by type
-        for (const e of entities) {
-            const mx = e.x * scx, my = e.y * scy;
-            if (e.kind === 'circle') {
-                mctx.fillStyle = 'rgba(200,120,120,0.75)';
-                mctx.fillRect(mx-1, my-1, 2, 2);
-            } else if (e.kind === 'shooter') {
-                mctx.fillStyle = '#f0a050';
-                mctx.fillRect(mx-1, my-1, 3, 3);
-            } else {
-                mctx.fillStyle = '#b07fe0';
-                mctx.fillRect(mx-2, my-2, 4, 4);
+    // ── Enemy view-radius ring (faint, when enemy sees player) ──
+    if(!player.dead){
+        for(const e of entities){
+            const[ex,ey]=w2s(e.x,e.y);
+            if(!onScreen(ex,ey,e.r*scx+20))continue;
+            const{dist}=closestTarget(e.x,e.y);
+            if(dist<e.viewRadius){
+                // Show detection cone fill
+                ctx.strokeStyle='rgba(255,100,100,0.12)'; ctx.lineWidth=1;
+                ctx.beginPath(); ctx.arc(ex,ey,e.viewRadius*scx,0,Math.PI*2); ctx.stroke();
             }
         }
-
-        // Player
-        if (!player.dead) {
-            mctx.fillStyle = '#b4c8ff';
-            mctx.beginPath();
-            mctx.arc(player.x * scx, player.y * scy, 3, 0, Math.PI * 2);
-            mctx.fill();
-        }
-
-        // Remote players
-        mctx.fillStyle = '#7fdc8f';
-        for (const id in remotePlayers) {
-            const rp = remotePlayers[id];
-            if (rp.dead) continue;
-            mctx.beginPath();
-            mctx.arc(rp.x * scx, rp.y * scy, 2.5, 0, Math.PI * 2);
-            mctx.fill();
-        }
-
-        // Viewport rect
-        mctx.strokeStyle = 'rgba(255,255,255,0.65)';
-        mctx.lineWidth = 1;
-        mctx.strokeRect(
-            (player.x - VIEW_W/2) * scx,
-            (player.y - VIEW_H/2) * scy,
-            VIEW_W * scx, VIEW_H * scy
-        );
-        mctx.strokeStyle = 'rgba(255,255,255,0.18)';
-        mctx.strokeRect(0, 0, mw, mh);
     }
 
-    // ── Loop ──────────────────────────────────────────────────────────────
-
-    let last = Date.now();
-    function loop() {
-        const now = Date.now(), dt = Math.min((now - last) / 1000, 0.05); last = now;
-        update(dt); draw();
-        requestAnimationFrame(loop);
+    // ── Power cubes ──
+    for(const c of powerCubes){
+        if(!c.active)continue;
+        const[cx,cy]=w2s(c.x,c.y);
+        if(!onScreen(cx,cy,30))continue;
+        const def=POWERUP_DEFS[c.kind],pulse=0.7+0.3*Math.sin(c.pulse),s=c.r*scx*pulse;
+        ctx.save(); ctx.translate(cx,cy); ctx.rotate(c.pulse*0.4);
+        ctx.shadowColor=def.color; ctx.shadowBlur=16*pulse;
+        ctx.fillStyle=def.bg.replace('0.25',String((0.4+0.2*pulse).toFixed(2)));
+        ctx.strokeStyle=def.color; ctx.lineWidth=1.5;
+        ctx.fillRect(-s,-s,s*2,s*2); ctx.strokeRect(-s,-s,s*2,s*2);
+        ctx.shadowBlur=0; ctx.fillStyle=def.color;
+        ctx.font=`bold ${Math.round(s*1.1)}px monospace`; ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.fillText(def.label.slice(0,2),0,0); ctx.restore();
     }
 
-    initGame();
-    loop();
+    // ── Entities ──
+    for(const e of entities){
+        const[ex,ey]=w2s(e.x,e.y);
+        if(!onScreen(ex,ey,e.r*scx+10))continue;
+        const fl=Math.min(1,Math.max(0,e.hitFlash/0.15));
+        const fc=base=>{const r=parseInt(base.slice(1,3),16),g=parseInt(base.slice(3,5),16),b=parseInt(base.slice(5,7),16);return`rgb(${Math.round(r+(255-r)*fl)},${Math.round(g+(255-g)*fl)},${Math.round(b+(255-b)*fl)})`;};
+
+        // Thrust exhaust flame (facing away from movement direction)
+        const spd=Math.hypot(e.vx,e.vy);
+        if(spd>15){
+            const exhaustAng=Math.atan2(e.vy,e.vx)+Math.PI;
+            const flameLen=(0.4+Math.random()*0.6)*e.r*scx*1.8*(spd/e.maxSpeed);
+            const ex2=ex+Math.cos(exhaustAng)*e.r*scx*0.8,ey2=ey+Math.sin(exhaustAng)*e.r*scx*0.8;
+            const grad=ctx.createLinearGradient(ex2,ey2,ex2+Math.cos(exhaustAng)*flameLen,ey2+Math.sin(exhaustAng)*flameLen);
+            grad.addColorStop(0,e.kind==='tank'?'rgba(180,80,255,0.8)':e.kind==='shooter'?'rgba(255,160,50,0.8)':'rgba(100,180,255,0.8)');
+            grad.addColorStop(1,'rgba(0,0,0,0)');
+            ctx.strokeStyle=grad; ctx.lineWidth=4*scx*(spd/e.maxSpeed);
+            ctx.lineCap='round'; ctx.beginPath();
+            ctx.moveTo(ex2,ey2); ctx.lineTo(ex2+Math.cos(exhaustAng)*flameLen,ey2+Math.sin(exhaustAng)*flameLen);
+            ctx.stroke(); ctx.lineCap='butt';
+        }
+
+        if(e.kind==='circle'){
+            ctx.fillStyle=fc('#c87878'); ctx.beginPath(); ctx.arc(ex,ey,e.r*scx,0,Math.PI*2); ctx.fill();
+            // Directional indicator
+            ctx.strokeStyle='rgba(255,255,255,0.4)'; ctx.lineWidth=1.5;
+            ctx.beginPath(); ctx.moveTo(ex,ey); ctx.lineTo(ex+Math.cos(e.angle)*e.r*scx,ey+Math.sin(e.angle)*e.r*scx); ctx.stroke();
+        } else if(e.kind==='shooter'){
+            ctx.fillStyle=fc('#f0a050'); ctx.strokeStyle=fl>0.1?'#fff':'#ffcc80'; ctx.lineWidth=1;
+            const s=e.r*scx,h=[Math.cos(e.angle),Math.sin(e.angle)],rv=[Math.cos(e.angle+2.3),Math.sin(e.angle+2.3)],lv=[Math.cos(e.angle-2.3),Math.sin(e.angle-2.3)];
+            ctx.beginPath(); ctx.moveTo(ex+h[0]*s*1.2,ey+h[1]*s*1.2); ctx.lineTo(ex+rv[0]*s*0.9,ey+rv[1]*s*0.9); ctx.lineTo(ex+lv[0]*s*0.9,ey+lv[1]*s*0.9); ctx.closePath(); ctx.fill(); ctx.stroke();
+        } else {
+            ctx.fillStyle=fc('#9b59b6'); ctx.strokeStyle=fl>0.1?'#fff':'#c39bd3'; ctx.lineWidth=1.5;
+            const s=e.r*scx; ctx.save(); ctx.translate(ex,ey); ctx.rotate(e.angle+Math.PI/4);
+            ctx.fillRect(-s,-s,s*2,s*2); ctx.strokeRect(-s,-s,s*2,s*2); ctx.restore();
+        }
+
+        if(e.maxHp>1&&e.hp<e.maxHp){
+            const bw=e.r*2*scx,bh=4*scx,bx=ex-bw/2,by=ey-e.r*scx-8*scx;
+            ctx.fillStyle='rgba(0,0,0,0.6)'; ctx.fillRect(bx,by,bw,bh);
+            const frac=e.hp/e.maxHp; ctx.fillStyle=`hsl(${Math.round(frac*110)},80%,50%)`; ctx.fillRect(bx,by,bw*frac,bh);
+        }
+    }
+
+    // ── Enemy bullets ──
+    ctx.fillStyle='#ff6040';
+    for(const b of enemyBullets){const[bx,by]=w2s(b.x,b.y);if(!onScreen(bx,by,20))continue;ctx.beginPath();ctx.arc(bx,by,4*scx,0,Math.PI*2);ctx.fill();}
+
+    // ── Player bullets ──
+    ctx.fillStyle='#fff078';
+    for(const b of playerBullets){
+        const[bx,by]=w2s(b.x,b.y);
+        ctx.beginPath();ctx.arc(bx,by,(b.r||3)*scx,0,Math.PI*2);ctx.fill();
+        if(b.homing){ctx.strokeStyle='rgba(255,68,68,0.4)';ctx.lineWidth=1;ctx.beginPath();ctx.arc(bx,by,(b.r||3)*scx+4*scx,0,Math.PI*2);ctx.stroke();}
+    }
+
+    // ── Remote players ──
+    for(const id in remotePlayers){
+        const rp=remotePlayers[id]; if(rp.dead)continue;
+        const[rx,ry]=w2s(rp.x,rp.y); if(!onScreen(rx,ry))continue;
+        ctx.fillStyle='#7fdc8f';
+        const h=[Math.cos(rp.angle),Math.sin(rp.angle)],rv=[Math.cos(rp.angle+2.5),Math.sin(rp.angle+2.5)],lv=[Math.cos(rp.angle-2.5),Math.sin(rp.angle-2.5)],s=12*scx;
+        ctx.beginPath();ctx.moveTo(rx+h[0]*s,ry+h[1]*s);ctx.lineTo(rx+rv[0]*s*0.7,ry+rv[1]*s*0.7);ctx.lineTo(rx+lv[0]*s*0.7,ry+lv[1]*s*0.7);ctx.closePath();ctx.fill();
+        ctx.fillStyle='#9fe0a8';ctx.font='11px monospace';ctx.textAlign='center';ctx.fillText(rp.name||id.slice(0,6),rx,ry-18*scx);
+    }
+
+    // ── Remote bullets ──
+    ctx.fillStyle='#90f0a0';
+    for(const b of remoteBullets){const[bx,by]=w2s(b.x,b.y);if(!onScreen(bx,by,20))continue;ctx.beginPath();ctx.arc(bx,by,3*scx,0,Math.PI*2);ctx.fill();}
+
+    // ── Player ship ──
+    if(!player.dead){
+        const[px,py]=w2s(player.x,player.y);
+        // Thrust flame
+        if(player.thrust>0){
+            const exhaustAng=player.angle+Math.PI,fl=8+(Math.random()*6);
+            const ex2=px+Math.cos(exhaustAng)*12*scx,ey2=py+Math.sin(exhaustAng)*12*scx;
+            const grad=ctx.createLinearGradient(ex2,ey2,ex2+Math.cos(exhaustAng)*fl*scx,ey2+Math.sin(exhaustAng)*fl*scx);
+            grad.addColorStop(0,'rgba(100,200,255,0.9)');grad.addColorStop(0.5,'rgba(60,120,255,0.6)');grad.addColorStop(1,'rgba(0,0,0,0)');
+            ctx.strokeStyle=grad;ctx.lineWidth=5*scx;ctx.lineCap='round';
+            ctx.beginPath();ctx.moveTo(ex2,ey2);ctx.lineTo(ex2+Math.cos(exhaustAng)*fl*scx,ey2+Math.sin(exhaustAng)*fl*scx);ctx.stroke();ctx.lineCap='butt';
+        }
+        ctx.fillStyle=isGhost()?'rgba(180,160,255,0.5)':'#b4c8ff';
+        if(isGhost()){ctx.shadowColor='#cc99ff';ctx.shadowBlur=18;}
+        const h=[Math.cos(player.angle),Math.sin(player.angle)],rv=[Math.cos(player.angle+2.5),Math.sin(player.angle+2.5)],lv=[Math.cos(player.angle-2.5),Math.sin(player.angle-2.5)],s=12*scx;
+        ctx.beginPath();ctx.moveTo(px+h[0]*s,py+h[1]*s);ctx.lineTo(px+rv[0]*s*0.7,py+rv[1]*s*0.7);ctx.lineTo(px+lv[0]*s*0.7,py+lv[1]*s*0.7);ctx.closePath();ctx.fill();
+        ctx.shadowBlur=0;
+        if(hasEffect('shield')){ctx.strokeStyle='#4488ff';ctx.lineWidth=2;ctx.shadowColor='#4488ff';ctx.shadowBlur=10;ctx.beginPath();ctx.arc(px,py,s*1.8,0,Math.PI*2);ctx.stroke();ctx.shadowBlur=0;}
+        if(turnMode==='mouse'){ctx.strokeStyle='rgba(200,200,255,0.2)';ctx.lineWidth=1;ctx.setLineDash([4,4]);ctx.beginPath();ctx.moveTo(px,py);ctx.lineTo(mouseX,mouseY);ctx.stroke();ctx.setLineDash([]);}
+    }
+
+    // HUD
+    document.getElementById('score').textContent=score;
+    document.getElementById('deadMsg').style.display=player.dead?'block':'none';
+    document.getElementById('zoomHud').textContent=zoomLevel!==1.0?`zoom ${zoomLevel.toFixed(2)}×`:'';
+    const roleEl=document.getElementById('roleTag');
+    if(roleEl&&netState==='connected'){roleEl.textContent=isHost?' [HOST]':' [CLIENT]';roleEl.style.color=isHost?'#e0c060':'#80c0ff';}
+    else if(roleEl)roleEl.textContent='';
+    drawMinimap();
+}
+
+// ── Minimap ────────────────────────────────────────────────────────────────
+function drawMinimap(){
+    const mw=mm.width,mh=mm.height,scx=mw/WORLD_W,scy=mh/WORLD_H;
+    mctx.fillStyle='rgba(8,8,16,0.95)'; mctx.fillRect(0,0,mw,mh);
+
+    // Obstacles on minimap
+    mctx.fillStyle='#1e3028';
+    for(const obs of obstacles){
+        mctx.beginPath();
+        mctx.moveTo(obs.pts[0].x*scx,obs.pts[0].y*scy);
+        for(let i=1;i<obs.pts.length;i++)mctx.lineTo(obs.pts[i].x*scx,obs.pts[i].y*scy);
+        mctx.closePath(); mctx.fill();
+    }
+
+    // Power cubes
+    for(const c of powerCubes){if(!c.active)continue;mctx.fillStyle=POWERUP_DEFS[c.kind].color;mctx.fillRect(c.x*scx-2,c.y*scy-2,4,4);}
+
+    // Entities
+    for(const e of entities){
+        const mx=e.x*scx,my=e.y*scy;
+        if(e.kind==='circle'){mctx.fillStyle='rgba(200,120,120,0.75)';mctx.fillRect(mx-1,my-1,2,2);}
+        else if(e.kind==='shooter'){mctx.fillStyle='#f0a050';mctx.fillRect(mx-1,my-1,3,3);}
+        else{mctx.fillStyle='#b07fe0';mctx.fillRect(mx-2,my-2,4,4);}
+    }
+
+    if(!player.dead){mctx.fillStyle='#b4c8ff';mctx.beginPath();mctx.arc(player.x*scx,player.y*scy,3,0,Math.PI*2);mctx.fill();}
+    mctx.fillStyle='#7fdc8f';
+    for(const id in remotePlayers){const rp=remotePlayers[id];if(rp.dead)continue;mctx.beginPath();mctx.arc(rp.x*scx,rp.y*scy,2.5,0,Math.PI*2);mctx.fill();}
+
+    mctx.strokeStyle='rgba(255,255,255,0.65)'; mctx.lineWidth=1;
+    mctx.strokeRect((player.x-viewW/2)*scx,(player.y-viewH/2)*scy,viewW*scx,viewH*scy);
+    mctx.strokeStyle='rgba(255,255,255,0.18)'; mctx.strokeRect(0,0,mw,mh);
+}
+
+// ── Settings panel ─────────────────────────────────────────────────────────
+function openSettings(){
+    document.getElementById('sName').value=myName;
+    document.getElementById('sTurnMode').value=turnMode;
+    document.getElementById('sSens').value=sensitivity; document.getElementById('sSensVal').textContent=sensitivity.toFixed(1);
+    document.getElementById('sZoom').value=zoomLevel;   document.getElementById('sZoomVal').textContent=zoomLevel.toFixed(2)+'×';
+    document.getElementById('sFps').value=fpsCap;       document.getElementById('sFpsVal').textContent=fpsCap;
+    document.getElementById('sFpsUnlimit').value=unlimitFps?'1':'0';
+    document.getElementById('settingsOverlay').classList.add('open');
+}
+function closeSettings(){document.getElementById('settingsOverlay').classList.remove('open');}
+function applySettings(){
+    const n=document.getElementById('sName').value.trim(); if(n)myName=n;
+    turnMode   =document.getElementById('sTurnMode').value;
+    sensitivity=parseFloat(document.getElementById('sSens').value);
+    zoomLevel  =parseFloat(document.getElementById('sZoom').value);
+    fpsCap     =parseInt(document.getElementById('sFps').value,10);
+    unlimitFps =document.getElementById('sFpsUnlimit').value==='1';
+    recalcView(); closeSettings();
+}
+function resetDefaults(){turnMode=DEFAULTS.turnMode;sensitivity=DEFAULTS.sensitivity;zoomLevel=DEFAULTS.zoom;fpsCap=DEFAULTS.fpsCap;unlimitFps=DEFAULTS.unlimitFps;recalcView();openSettings();}
+
+const sl=(id,vid,fmt)=>{const e=document.getElementById(id),v=document.getElementById(vid);e.addEventListener('input',()=>v.textContent=fmt(e.value));};
+sl('sSens','sSensVal',v=>parseFloat(v).toFixed(1));
+sl('sZoom','sZoomVal',v=>parseFloat(v).toFixed(2)+'×');
+sl('sFps','sFpsVal',v=>v);
+
+document.getElementById('settingsBtn').addEventListener('click',  openSettings);
+document.getElementById('settingsClose').addEventListener('click',closeSettings);
+document.getElementById('sApply').addEventListener('click',       applySettings);
+document.getElementById('sReset').addEventListener('click',       resetDefaults);
+document.getElementById('settingsOverlay').addEventListener('click',e=>{if(e.target===document.getElementById('settingsOverlay'))closeSettings();});
+
+// ── Game loop ──────────────────────────────────────────────────────────────
+let last=Date.now();
+function loop(){
+    requestAnimationFrame(loop);
+    const now=Date.now(),delta=now-last;
+    const minMs=(!unlimitFps&&fpsCap>0)?1000/fpsCap:0;
+    if(delta<minMs)return;
+    const dt=Math.min(delta/1000,0.05); last=now;
+    update(dt); draw();
+}
+initGame();
+loop();
 </script>
 </body>
 </html>
