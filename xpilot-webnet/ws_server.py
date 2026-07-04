@@ -146,6 +146,15 @@ async def handler(ws):
                 cid = msg.get("id")
                 await broadcast(msg, exclude_id=cid)
 
+            elif mtype == "hit":
+                # Non-host client reports a bullet hit on entity idx; relay to host
+                cid = msg.get("id")
+                if cid:
+                    async with CLIENTS_LOCK:
+                        if cid in CLIENTS:
+                            CLIENTS[cid]["last_seen"] = now()
+                await broadcast(msg, exclude_id=cid)
+
             elif mtype == "leave":
                 cid = msg.get("id")
                 if cid:

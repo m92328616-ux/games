@@ -100,7 +100,7 @@
         <span style="color:#c87878">● circle</span> 10pts&nbsp;
         <span style="color:#f0a050">▲ shooter</span> 20pts&nbsp;
         <span style="color:#b07fe0">■ tank</span> 50pts<br>
-        <span id="connStatus" style="color:#888">Offline (single player)</span>
+        <span id="connStatus" style="color:#888">Offline (single player)</span><span id="roleTag" style="font-size:11px"></span>
         <span id="playerCount"></span>
     </div>
 
@@ -136,6 +136,21 @@
     let stateSendAccum = 0;
     const REMOTE_TIMEOUT = 8.0;
 
+    // ── Host election ─────────────────────────────────────────────────────
+    // The client with the lexicographically smallest ID is the host.
+    // The host runs the authoritative entity simulation and broadcasts
+    // entity state to all other clients at ENTITY_SEND_HZ.
+    let allKnownIds = new Set([MY_ID]);
+    let isHost = true;   // true until another player joins with a lower ID
+
+    function reelectHost() {
+        const minId = [...allKnownIds].sort()[0];
+        isHost = (minId === MY_ID);
+    }
+
+    const ENTITY_SEND_HZ = 12;    // entity state broadcasts per second
+    let entitySendAccum = 0;
+
     const canvas = document.getElementById('gameCanvas');
     const ctx    = canvas.getContext('2d');
     const gc     = document.getElementById('gameContainer');
@@ -157,11 +172,19 @@
 
     // ── Entity factories ──────────────────────────────────────────────────
 
+    // Each entity carries a `gen` (generation) counter that increments every
+    // time the entity is replaced (killed + respawned).  Hit messages include
+    // the sender's `gen` value; the host rejects hits whose gen doesn't match
+    // the current entity at that index, preventing stale hits from damaging
+    // freshly-spawned enemies.
+    let _nextGen = 1;
+    function nextGen() { return _nextGen++; }
+
     // HP per type: circles = 1 (one-shot), shooters = 2, tanks = 5
     function mkCircle() {
         const ang = Math.random() * Math.PI * 2;
         return {
-            kind: 'circle',
+            kind: 'circle', gen: nextGen(),
             x: Math.random() * WORLD_W, y: Math.random() * WORLD_H,
             vx: Math.cos(ang) * (20 + Math.random() * 60),
             vy: Math.sin(ang) * (20 + Math.random() * 60),
@@ -173,7 +196,7 @@
     function mkShooter() {
         const ang = Math.random() * Math.PI * 2;
         return {
-            kind: 'shooter',
+            kind: 'shooter', gen: nextGen(),
             x: Math.random() * WORLD_W, y: Math.random() * WORLD_H,
             vx: Math.cos(ang) * (15 + Math.random() * 35),
             vy: Math.sin(ang) * (15 + Math.random() * 35),
@@ -186,7 +209,7 @@
     function mkTank() {
         const ang = Math.random() * Math.PI * 2;
         return {
-            kind: 'tank',
+            kind: 'tank', gen: nextGen(),
             x: Math.random() * WORLD_W, y: Math.random() * WORLD_H,
             vx: Math.cos(ang) * (8 + Math.random() * 12),
             vy: Math.sin(ang) * (8 + Math.random() * 12),
@@ -265,6 +288,14 @@
 
         ws.onclose = () => {
             if (netState !== 'error') setConnStatus('offline', 'Offline (single player)');
+            // Immediately restore host authority so shooter AI and entity
+            // simulation resume without waiting for the stale-prune cycle.
+            for (const id of [...allKnownIds]) {
+                if (id !== MY_ID) allKnownIds.delete(id);
+            }
+            for (const id in remotePlayers) delete remotePlayers[id];
+            reelectHost();
+            updatePlayerCount();
         };
     }
 
@@ -274,14 +305,18 @@
         if (msg.type === 'roster') {
             (msg.players || []).forEach(p => {
                 if (p.id === MY_ID) return;
+                allKnownIds.add(p.id);
                 upsertRemote(p.id, p.name, p.state);
             });
+            reelectHost();
             updatePlayerCount();
             return;
         }
 
         if (msg.type === 'player_joined') {
             if (msg.id === MY_ID) return;
+            allKnownIds.add(msg.id);
+            reelectHost();
             if (!remotePlayers[msg.id]) {
                 remotePlayers[msg.id] = {
                     x: WORLD_W / 2, y: WORLD_H / 2, angle: 0,
@@ -294,6 +329,8 @@
         }
 
         if (msg.type === 'player_left') {
+            allKnownIds.delete(msg.id);
+            reelectHost();
             delete remotePlayers[msg.id];
             updatePlayerCount();
             return;
@@ -301,6 +338,10 @@
 
         if (msg.type === 'state') {
             if (msg.id === MY_ID) return;
+            if (!allKnownIds.has(msg.id)) {
+                allKnownIds.add(msg.id);
+                reelectHost();   // a previously-unknown peer appeared; re-check who is host
+            }
             upsertRemote(msg.id, msg.name, msg);
             return;
         }
@@ -308,6 +349,34 @@
         if (msg.type === 'shoot') {
             if (msg.id === MY_ID) return;
             remoteBullets.push({ x: msg.x, y: msg.y, vx: msg.vx, vy: msg.vy, life: 2.2 });
+            return;
+        }
+
+        // ── Entity sync messages ──────────────────────────────────────────
+        if (msg.type === 'enemies') {
+            // Only non-hosts apply host's entity state
+            if (msg.id === MY_ID || isHost) return;
+            applyHostEntities(msg.entities || []);
+            return;
+        }
+
+        if (msg.type === 'hit') {
+            // Only the host processes incoming hit reports from non-hosts
+            if (!isHost || msg.id === MY_ID) return;
+            const idx = msg.idx;
+            if (idx < 0 || idx >= entities.length) return;
+            const e = entities[idx];
+            // Reject stale hits: if gen doesn't match, this hit targeted an
+            // entity that has already been replaced (respawned); discard it.
+            if (msg.gen !== undefined && e.gen !== msg.gen) return;
+            e.hp = Math.max(0, e.hp - 1);
+            e.hitFlash = 0.18;
+            if (e.hp <= 0) {
+                const replacement = e.kind === 'circle'  ? mkCircle()
+                                  : e.kind === 'shooter' ? mkShooter()
+                                  :                        mkTank();
+                entities.splice(idx, 1, replacement);
+            }
             return;
         }
     }
@@ -335,11 +404,111 @@
         let changed = false;
         for (const id in remotePlayers) {
             if (now - remotePlayers[id].lastUpdate > REMOTE_TIMEOUT) {
+                allKnownIds.delete(id);
                 delete remotePlayers[id];
                 changed = true;
             }
         }
-        if (changed) updatePlayerCount();
+        if (changed) { reelectHost(); updatePlayerCount(); }
+    }
+
+    // ── Entity sync helpers ───────────────────────────────────────────────
+
+    /** Serialize entity array into a compact JSON-safe form for network send. */
+    function serializeEntities() {
+        return entities.map(e => {
+            const d = {
+                kind: e.kind,
+                gen:  e.gen,   // generation counter — used to validate hit messages
+                x: Math.round(e.x * 10) / 10,
+                y: Math.round(e.y * 10) / 10,
+                vx: Math.round(e.vx * 10) / 10,
+                vy: Math.round(e.vy * 10) / 10,
+                r: e.r,
+                hp: e.hp,
+                maxHp: e.maxHp,
+                pts: e.pts,
+            };
+            if (e.kind === 'shooter') {
+                d.angle    = Math.round(e.angle * 1000) / 1000;
+                d.fireCool = Math.round(e.fireCool * 100) / 100;
+            }
+            return d;
+        });
+    }
+
+    /**
+     * Apply entity state received from the host.
+     * - Replaces entities whose kind changed (respawned enemies).
+     * - Updates position/velocity/hp for entities of the same kind.
+     * - Preserves local hitFlash so visual feedback isn't clobbered.
+     */
+    function applyHostEntities(hostEntities) {
+        if (!Array.isArray(hostEntities) || hostEntities.length === 0) return;
+
+        // Guard: skip malformed entries that lack the minimum required fields
+        const VALID_KINDS = new Set(['circle', 'shooter', 'tank']);
+        const valid = hostEntities.every(he =>
+            he && VALID_KINDS.has(he.kind) && typeof he.gen === 'number' &&
+            typeof he.x === 'number' && typeof he.y === 'number'
+        );
+        if (!valid) return;
+
+        // If the list length changed (shouldn't happen but be safe), rebuild
+        if (hostEntities.length !== entities.length) {
+            entities = hostEntities.map(he => {
+                const e = he.kind === 'circle'  ? mkCircle()
+                        : he.kind === 'shooter' ? mkShooter()
+                        :                         mkTank();
+                Object.assign(e, he);
+                e.hitFlash = 0;
+                return e;
+            });
+            return;
+        }
+
+        for (let i = 0; i < entities.length; i++) {
+            const e  = entities[i];
+            const he = hostEntities[i];
+            if (e.gen !== he.gen) {
+                // Generation mismatch: entity was replaced on the host.
+                // Build a fresh local copy from the host's data so factories
+                // don't overwrite any fields that the host already set.
+                const ne = he.kind === 'circle'  ? mkCircle()
+                         : he.kind === 'shooter' ? mkShooter()
+                         :                         mkTank();
+                Object.assign(ne, he);          // host values win
+                ne.gen      = he.gen;           // carry over host gen exactly
+                ne.hitFlash = 0.15;             // brief flash so the swap is visible
+                entities[i] = ne;
+            } else {
+                // Same entity: sync position, velocity, hp from host.
+                e.x  = he.x;  e.y  = he.y;
+                e.vx = he.vx; e.vy = he.vy;
+                // Trigger hit flash when host records damage we didn't see locally
+                if (he.hp < e.hp) { e.hp = he.hp; e.hitFlash = 0.15; }
+                else               { e.hp = he.hp; }
+                if (he.angle    !== undefined) e.angle    = he.angle;
+                if (he.fireCool !== undefined) e.fireCool = he.fireCool;
+            }
+        }
+    }
+
+    /** Host: broadcast entity state to all peers. */
+    function sendNetEntities(dt) {
+        if (!ws || ws.readyState !== WebSocket.OPEN || !isHost) return;
+        entitySendAccum += dt;
+        if (entitySendAccum < 1 / ENTITY_SEND_HZ) return;
+        entitySendAccum = 0;
+        ws.send(JSON.stringify({ type: 'enemies', id: MY_ID, entities: serializeEntities() }));
+    }
+
+    /** Non-host: report a bullet hit on entity at index idx to the host.
+     *  Includes the entity's gen so the host can reject stale hits. */
+    function sendHit(idx) {
+        if (!ws || ws.readyState !== WebSocket.OPEN || isHost) return;
+        const gen = entities[idx] ? entities[idx].gen : -1;
+        ws.send(JSON.stringify({ type: 'hit', id: MY_ID, idx, gen }));
     }
 
     function sendNetState(dt) {
@@ -464,28 +633,35 @@
             if (e.kind === 'shooter') {
                 const visible = canSee(e);
 
-                // Only aim at the player when visible
-                if (visible) {
-                    const tdx = wrapDelta(e.x, player.x, WORLD_W);
-                    const tdy = wrapDelta(e.y, player.y, WORLD_H);
-                    const targetAng = Math.atan2(tdy, tdx);
-                    let da = targetAng - e.angle;
-                    da = ((da + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
-                    e.angle += Math.sign(da) * Math.min(Math.abs(da), 1.2 * dt);
-                }
+                // Only the host runs the shooter AI (aiming + firing).
+                // Non-hosts just advance position/hitFlash (done above) so
+                // the entity looks smooth between host syncs; they do NOT
+                // spawn enemy bullets — those are purely cosmetic and each
+                // client manages its own copy of enemyBullets for danger feedback.
+                if (isHost) {
+                    // Aim at the player when visible
+                    if (visible) {
+                        const tdx = wrapDelta(e.x, player.x, WORLD_W);
+                        const tdy = wrapDelta(e.y, player.y, WORLD_H);
+                        const targetAng = Math.atan2(tdy, tdx);
+                        let da = targetAng - e.angle;
+                        da = ((da + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
+                        e.angle += Math.sign(da) * Math.min(Math.abs(da), 1.2 * dt);
+                    }
 
-                // Cooldown always ticks; only fires when visible
-                e.fireCool -= dt;
-                if (e.fireCool <= 0 && visible && !player.dead) {
-                    e.fireCool = 3 + Math.random() * 2;
-                    const sp = 120;
-                    enemyBullets.push({
-                        x: e.x + Math.cos(e.angle) * (e.r + 4),
-                        y: e.y + Math.sin(e.angle) * (e.r + 4),
-                        vx: Math.cos(e.angle) * sp,
-                        vy: Math.sin(e.angle) * sp,
-                        life: 5,
-                    });
+                    // Cooldown always ticks; only fires when visible
+                    e.fireCool -= dt;
+                    if (e.fireCool <= 0 && visible && !player.dead) {
+                        e.fireCool = 3 + Math.random() * 2;
+                        const sp = 120;
+                        enemyBullets.push({
+                            x: e.x + Math.cos(e.angle) * (e.r + 4),
+                            y: e.y + Math.sin(e.angle) * (e.r + 4),
+                            vx: Math.cos(e.angle) * sp,
+                            vy: Math.sin(e.angle) * sp,
+                            life: 5,
+                        });
+                    }
                 }
             }
         }
@@ -512,20 +688,41 @@
             }
         }
 
-        // — Player bullets vs entities (hp-based damage) —
+        // — Player bullets vs entities (hp-based damage, host-authoritative) ——
+        //
+        // HOST: runs the authoritative simulation — kills entities, respawns
+        //   them, and the result is broadcast to all peers via sendNetEntities.
+        //
+        // NON-HOST: optimistically applies damage locally for instant feedback,
+        //   then reports the hit to the host via sendHit().  The host's next
+        //   entity sync (≤1/12 s later) will be the ground truth — if the host
+        //   also processes the hit the entity will simply not be there in the
+        //   next sync and the local replacement is already in place.
         for (const b of playerBullets) {
             for (let i = 0; i < entities.length; i++) {
                 const e = entities[i];
                 if (Math.hypot(b.x - e.x, b.y - e.y) < e.r) {
+                    // Capture gen BEFORE any local kill/splice so the host
+                    // message targets the correct entity generation.
+                    const hitGen = e.gen;
                     e.hp -= 1;
-                    e.hitFlash = 0.15;           // white flash on hit
+                    e.hitFlash = 0.15;
                     playerBullets = playerBullets.filter(x => x !== b);
+
                     if (e.hp <= 0) {
                         score += e.pts;
                         const replacement = e.kind === 'circle'  ? mkCircle()
                                           : e.kind === 'shooter' ? mkShooter()
                                           :                        mkTank();
                         entities.splice(i, 1, replacement);
+                        // Notify host AFTER local splice, using saved gen
+                        // (sendHit uses entities[idx].gen which is now the replacement;
+                        //  that's why we bypass it and send the captured hitGen directly)
+                        if (!isHost && ws && ws.readyState === WebSocket.OPEN)
+                            ws.send(JSON.stringify({ type: 'hit', id: MY_ID, idx: i, gen: hitGen }));
+                    } else {
+                        // Partial hit — entity still alive; sendHit helper is fine here
+                        sendHit(i);
                     }
                     break;
                 }
@@ -541,6 +738,7 @@
         });
 
         sendNetState(dt);
+        sendNetEntities(dt);   // host-only; no-op for non-hosts
         pruneStaleRemotes();
     }
 
@@ -722,6 +920,14 @@
         // HUD
         document.getElementById('score').textContent = score;
         document.getElementById('deadMsg').style.display = player.dead ? 'block' : 'none';
+        // Update host/client role badge next to connection status
+        const roleEl = document.getElementById('roleTag');
+        if (roleEl && netState === 'connected') {
+            roleEl.textContent = isHost ? ' [HOST]' : ' [CLIENT]';
+            roleEl.style.color  = isHost ? '#e0c060' : '#80c0ff';
+        } else if (roleEl) {
+            roleEl.textContent = '';
+        }
 
         drawMinimap();
     }
