@@ -199,3 +199,35 @@ Both web versions are touch-optimized: a joystick (left side) for
 rotate/thrust, and Thrust/Shoot/Restart buttons (right side). The canvas
 scales to fit any screen size — phones, tablets, and desktops all work
 from the same URL.
+
+---
+
+## Synchronized screens (enemies in the same place for everyone)
+
+**`xpilot-web.html`** now uses host-authoritative entity synchronization so
+every connected player sees enemies at exactly the same positions.
+
+### How it works
+
+| Role | What it does |
+|------|-------------|
+| **HOST** (`[HOST]` shown in HUD) | Runs the authoritative entity simulation (positions, HP, AI, respawns). Broadcasts full enemy state to all peers at 12 Hz. |
+| **CLIENT** (`[CLIENT]` shown in HUD) | Receives and applies the host's enemy state every ~83 ms. Runs entity physics locally between updates for smooth visuals. Sends `hit` reports to the host when a bullet connects. |
+
+**Host election:** the player whose browser-generated ID is lexicographically
+smallest becomes the host. If the host leaves, the next-lowest-ID client takes
+over automatically within one heartbeat cycle.
+
+**Kill reporting:** when a non-host bullet hits an enemy, the client:
+1. Applies the kill locally (instant visual feedback + score).
+2. Sends a `hit` message to the host with the entity index *and* generation
+   counter (`gen`).
+3. The host validates `gen` (stale hits targeting an already-respawned enemy
+   are silently discarded), then applies damage and respawns the enemy.
+4. The host's next entity broadcast corrects any local/remote divergence.
+
+**Shooter AI** (enemies that fire back) runs exclusively on the host so all
+clients see the same bullets coming from the same places.
+
+**On disconnect:** each client immediately reclaims host authority so
+single-player mode resumes at full fidelity without waiting for a timeout.
