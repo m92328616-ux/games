@@ -146,6 +146,11 @@ async def handler(ws):
                 cid = msg.get("id")
                 await broadcast(msg, exclude_id=cid)
 
+            elif mtype == "pickups":
+                # Forward pickup state sync from the host to all other clients
+                cid = msg.get("id")
+                await broadcast(msg, exclude_id=cid)
+
             elif mtype == "hit":
                 # Non-host client reports a bullet hit on entity idx; relay to host
                 cid = msg.get("id")

@@ -92,3 +92,24 @@ Each game can be run independently — see the sections above for specific instr
 
 No license file is currently included. Add one if you intend to share or accept contributions to this project.
 Large files such as [`xpilot-webnet/`](xpilot-webnet/) would have to go through thorough checks to continue.
+
+## Bugs / Issues
+
+We ask you very politely to point out any bugs or glitches you may have encountered throughout these games. Create any issues for this repository if you have found any bugs. We will try to attend to every issue and create a fix. 
+
+This is an open repository and all changes are welcomed except the ones that may undermine the foundations of these projects.
+
+## Author's Notes:
+
+This repository is a creation for games only. Explicit or malicious content will be flagged and removed off of the repository without an appeal as to so. Examples of such may include:
+
+* NSFW or elxplicit content.
+* Rude or offensive commentry on any part of this repository.
+* Racist and sexual harm or violence will not be tolerated in this group project.
+* Distributing malware or exploits using our repository or any files inside will easily be confronted with Github Staff even State Police and may get you in seriious consequences.
+* Hosting sexually, obscene material, doxxing, and threatening violence will strictly break the rules and T&C's of ['Github's Acceptable Use Policies'](https://docs.github.com/en/site-policy/acceptable-use-policies/github-acceptable-use-policies)
+* Please refrain of using such illict actions.
+
+Thank you for following these rules set up here so we can maintain a happy community of people who want to code.
+
+ - m92328616-ux
