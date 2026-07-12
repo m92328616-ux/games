@@ -112,6 +112,126 @@ pkill -f "python.*net_server.py"
 
 ---
 
+## Log Viewer (External Terminal)
+
+XPilot includes a real-time logging system that streams log output from
+the game and servers to an external terminal window. This is useful for
+monitoring game events, network activity, and debugging without cluttering
+the main game or server terminal.
+
+### How it works
+
+Every game process (desktop client, WebSocket server, web server) runs a
+small TCP log server in the background. An external terminal script
+connects to that server and displays every log entry as it arrives, with
+color-coded severity levels:
+
+| Level | Color | Meaning |
+|-------|-------|---------|
+| `DEBUG` | White | Verbose diagnostic info |
+| `INFO` | Green | Normal events (score changes, connections) |
+| `WARNING` | Yellow | Unexpected but recoverable situations |
+| `ERROR` | Red | Failures (network drops, crashed connections) |
+| `CRITICAL` | Magenta | Fatal errors |
+
+### Quick start
+
+**1. Open a separate terminal and start the log viewer:**
+
+```bash
+python log_terminal.py
+```
+
+This connects to `localhost:9000` by default and waits for log output.
+
+**2. Start the game (or any server) in another terminal:**
+
+```bash
+python xpilot.py
+```
+
+Log entries immediately appear in the log viewer terminal:
+
+```
+Connected to log server at 127.0.0.1:9000
+------------------------------------------------------------------------
+[2026-07-12 14:30:01.123] [INFO   ] [Game    ] Game starting
+[2026-07-12 14:30:01.124] [INFO   ] [Game    ] Display initialized: 800x600 @ 60 FPS
+[2026-07-12 14:30:05.678] [INFO   ] [Game    ] Score: 10
+[2026-07-12 14:30:08.234] [WARNING] [Game    ] Player died!
+```
+
+### Custom port
+
+The desktop game client, WebSocket server, and web server all accept a
+`--log-port` flag to change the TCP port (default `9000`). Both the
+game/server and the log viewer must use the same port:
+
+```bash
+# Game on a custom port
+python xpilot.py --log-port 9100
+
+# Log viewer connecting to that port
+python log_terminal.py --port 9100
+```
+
+### Remote monitoring
+
+To monitor a game running on a different machine, pass `--host`:
+
+```bash
+python log_terminal.py --host 192.168.1.100 --port 9000
+```
+
+> **Note:** The log server binds to `127.0.0.1` (localhost only) by
+> default for security. To allow remote connections, the game or server
+> would need to bind to `0.0.0.0` — this is not yet exposed as a flag
+> but can be changed in `log_interface.py`.
+
+### Using with servers
+
+The WebSocket server and web server also stream logs:
+
+```bash
+# Start servers
+python ws_server.py --log-port 9000
+python web-server.py --log-port 9000
+
+# Watch all logs in one terminal
+python log_terminal.py
+```
+
+Because each process runs its own log server on the same port, you can
+only run **one** at a time on port 9000. If you need multiple processes
+to stream to the same viewer, run each on a different port and open
+multiple viewer instances:
+
+```bash
+# Different ports for each process
+python xpilot.py --log-port 9001
+python ws_server.py --log-port 9002
+python log_terminal.py --port 9001
+python log_terminal.py --port 9002
+```
+
+### Log message format
+
+Each log entry is a JSON object sent as one line over TCP:
+
+```json
+{
+  "level": "INFO",
+  "time": "2026-07-12 14:30:01.123",
+  "source": "Game",
+  "message": "Score: 10"
+}
+```
+
+This makes it easy to write custom log consumers or pipe output to other
+tools.
+
+---
+
 ## Web versions
 
 Browsers can't speak the desktop version's raw UDP protocol, so the web

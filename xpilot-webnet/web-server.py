@@ -28,6 +28,10 @@ import json
 import subprocess
 import sys
 
+from log_interface import get_logger, start_log_server, stop_log_server
+
+log = get_logger("WebServer")
+
 SERVE_DIR = os.path.dirname(__file__)
 HTTPS_ENABLED = False
 BOUND_PORT = None
@@ -43,7 +47,7 @@ def ensure_self_signed_cert(cert_path, key_path):
     """
     if os.path.exists(cert_path) and os.path.exists(key_path):
         return
-    print(f"No cert found at {cert_path} -- generating a self-signed one...")
+    log.info(f"No cert found at {cert_path} -- generating a self-signed one...")
     try:
         subprocess.run(
             [
@@ -56,10 +60,10 @@ def ensure_self_signed_cert(cert_path, key_path):
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-        print(f"Generated self-signed cert: {cert_path}, key: {key_path}")
+        log.info(f"Generated self-signed cert: {cert_path}, key: {key_path}")
     except (subprocess.CalledProcessError, FileNotFoundError) as e:
-        print(f"Could not generate a self-signed certificate automatically: {e}")
-        print("Install OpenSSL, or pass --cert/--key pointing to an existing cert.")
+        log.error(f"Could not generate a self-signed certificate automatically: {e}")
+        log.error("Install OpenSSL, or pass --cert/--key pointing to an existing cert.")
         sys.exit(1)
 
 
@@ -117,12 +121,16 @@ if __name__ == '__main__':
     parser.add_argument('--https', action='store_true', help='Serve over HTTPS (TLS)')
     parser.add_argument('--cert', default=None, help='Path to TLS certificate (PEM). Auto-generated if omitted.')
     parser.add_argument('--key', default=None, help='Path to TLS private key (PEM). Auto-generated if omitted.')
+    parser.add_argument('--log-port', type=int, default=9000, help='TCP port for external log terminal (default: 9000)')
     args = parser.parse_args()
 
     os.chdir(SERVE_DIR)
 
     HTTPS_ENABLED = args.https
     BOUND_PORT = args.port
+
+    start_log_server(port=args.log_port)
+    log.info("Web server starting")
 
     Handler = GameHTTPHandler
     httpd = socketserver.TCPServer((args.host, args.port), Handler)
@@ -138,16 +146,18 @@ if __name__ == '__main__':
         httpd.socket = ctx.wrap_socket(httpd.socket, server_side=True)
         scheme = 'https'
 
-    print(f'XPilot Web Server listening on {args.host}:{args.port} ({scheme})')
-    print(f'  -> {scheme}://localhost:{args.port}/xpilot-web.html (JavaScript version)')
-    print(f'  -> {scheme}://localhost:{args.port}/xpilot-pyodide.html (Python/Pyodide version)')
-    print(f'  -> {scheme}://localhost:{args.port}/status (server status, JSON)')
+    log.info(f"XPilot Web Server listening on {args.host}:{args.port} ({scheme})")
+    log.info(f"  -> {scheme}://localhost:{args.port}/xpilot-web.html (JavaScript version)")
+    log.info(f"  -> {scheme}://localhost:{args.port}/xpilot-pyodide.html (Python/Pyodide version)")
+    log.info(f"  -> {scheme}://localhost:{args.port}/status (server status, JSON)")
     if args.https:
-        print('  Note: self-signed certs trigger a browser warning ("not private") --')
-        print('  click "Advanced -> Proceed" once per browser/visitor, or supply a real')
-        print('  cert via --cert/--key for a public domain (e.g. Let\'s Encrypt).')
+        log.info('  Note: self-signed certs trigger a browser warning ("not private") --')
+        log.info('  click "Advanced -> Proceed" once per browser/visitor, or supply a real')
+        log.info("  cert via --cert/--key for a public domain (e.g. Let's Encrypt).")
 
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
-        print('Shutting down...')
+        log.info("Shutting down...")
+    finally:
+        stop_log_server()

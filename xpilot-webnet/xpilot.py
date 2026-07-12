@@ -9,6 +9,11 @@ import time
 import uuid
 import argparse
 
+from log_interface import get_logger, start_log_server, stop_log_server
+
+log = get_logger("Game")
+net_log = get_logger("Network")
+
 WIDTH, HEIGHT = 800, 600
 FPS = 60
 
@@ -189,11 +194,15 @@ class NetworkClient:
             pass
 
 
-def main(server_host=None, server_port=50000):
+def main(server_host=None, server_port=50000, log_port=9000):
+    start_log_server(port=log_port)
+    log.info("Game starting")
+
     pygame.init()
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
     pygame.display.set_caption("XPilot (minimal) - Python")
     clock = pygame.time.Clock()
+    log.info(f"Display initialized: {WIDTH}x{HEIGHT} @ {FPS} FPS")
 
     player = Player(WIDTH // 2, HEIGHT // 2)
     bullets = []
@@ -206,26 +215,31 @@ def main(server_host=None, server_port=50000):
     if server_host:
         try:
             netclient = NetworkClient(server_host, server_port, player, bullets, remote_players, enemies)
-            print(f"Connected to server {server_host}:{server_port}")
+            net_log.info(f"Connected to server {server_host}:{server_port} (id={netclient.id})")
         except Exception as e:
-            print("Network disabled:", e)
+            net_log.error(f"Network disabled: {e}")
 
     font = pygame.font.SysFont(None, 24)
 
+    prev_dead = player.dead
+    prev_score = score
     running = True
     while running:
         dt = clock.tick(FPS) / 1000.0
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
+                log.info("Quit event received")
                 running = False
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
+                    log.info("Escape pressed, exiting")
                     running = False
                 if player.dead and event.key == pygame.K_r:
                     player = Player(WIDTH // 2, HEIGHT // 2)
                     bullets = []
                     enemies = [Enemy() for _ in range(6)]
                     score = 0
+                    log.info("Player respawned")
 
         keys = pygame.key.get_pressed()
         player.thrust = 0
@@ -279,6 +293,14 @@ def main(server_host=None, server_port=50000):
                     enemies.append(Enemy())
                     break
 
+        if player.dead and not prev_dead:
+            log.warning("Player died!")
+        prev_dead = player.dead
+
+        if score != prev_score:
+            log.info(f"Score: {score}")
+            prev_score = score
+
         # draw
         screen.fill((12, 12, 24))
         for e in enemies:
@@ -311,19 +333,22 @@ def main(server_host=None, server_port=50000):
 
         pygame.display.flip()
 
+    log.info("Game shutting down")
     pygame.quit()
     if netclient:
         netclient.close()
+    stop_log_server()
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="XPilot minimal with optional networking")
     parser.add_argument("--server", help="server host to connect to (run net_server.py separately)")
     parser.add_argument("--port", type=int, default=50000, help="server UDP port")
+    parser.add_argument("--log-port", type=int, default=9000, help="TCP port for external log terminal (default: 9000)")
     args = parser.parse_args()
     try:
-        main(args.server, args.port)
+        main(args.server, args.port, args.log_port)
     except Exception as e:
-        print("Error:", e)
+        log.critical(f"Fatal error: {e}")
         pygame.quit()
         sys.exit(1)

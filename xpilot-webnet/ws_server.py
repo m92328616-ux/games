@@ -40,6 +40,10 @@ import http.server
 import socketserver
 import threading
 
+from log_interface import get_logger, start_log_server, stop_log_server
+
+log = get_logger("WSServer")
+
 try:
     import websockets
 except ImportError:
@@ -117,7 +121,7 @@ async def handler(ws):
                         "last_state": None,
                         "last_seen": now(),
                     }
-                print(f"Client joined: {client_id} ({name})")
+                log.info(f"Client joined: {client_id} ({name})")
                 await send_roster(ws, client_id)
                 await broadcast(
                     {"type": "player_joined", "id": client_id, "name": name},
@@ -175,7 +179,7 @@ async def handler(ws):
         if client_id:
             async with CLIENTS_LOCK:
                 CLIENTS.pop(client_id, None)
-            print(f"Client left: {client_id}")
+            log.info(f"Client left: {client_id}")
             await broadcast({"type": "player_left", "id": client_id})
 
 
@@ -192,7 +196,7 @@ async def reap_stale_clients():
             for cid in stale:
                 CLIENTS.pop(cid, None)
         for cid in stale:
-            print(f"Client timed out: {cid}")
+            log.warning(f"Client timed out: {cid}")
             await broadcast({"type": "player_left", "id": cid})
 
 
@@ -225,9 +229,9 @@ def start_http_status(http_port):
         httpd = socketserver.TCPServer(("0.0.0.0", http_port), StatusHandler)
         httpd.allow_reuse_address = True
     except Exception as e:
-        print(f"HTTP status server failed to start on port {http_port}: {e}")
+        log.error(f"HTTP status server failed to start on port {http_port}: {e}")
         return
-    print(f"HTTP status endpoint listening on 0.0.0.0:{http_port} (GET /status)")
+    log.info(f"HTTP status endpoint listening on 0.0.0.0:{http_port} (GET /status)")
     httpd.serve_forever()
 
 
@@ -239,7 +243,7 @@ async def main(host, port, http_port):
     asyncio.create_task(reap_stale_clients())
 
     async with websockets.serve(handler, host, port, ping_interval=10, ping_timeout=10):
-        print(f"XPilot WebSocket relay listening on ws://{host}:{port}")
+        log.info(f"XPilot WebSocket relay listening on ws://{host}:{port}")
         await asyncio.Future()  # run forever
 
 
@@ -251,9 +255,13 @@ if __name__ == "__main__":
         "--http-port", default=8766, type=int,
         help="HTTP port for GET /status (0 to disable)",
     )
+    parser.add_argument("--log-port", type=int, default=9000, help="TCP port for external log terminal (default: 9000)")
     args = parser.parse_args()
 
+    start_log_server(port=args.log_port)
     try:
         asyncio.run(main(args.host, args.port, args.http_port if args.http_port else None))
     except KeyboardInterrupt:
-        print("Shutting down")
+        log.info("Shutting down")
+    finally:
+        stop_log_server()
