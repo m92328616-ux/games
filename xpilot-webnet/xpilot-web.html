@@ -308,11 +308,13 @@ function distSqPointSeg(px,py,ax,ay,bx,by){
     return Math.hypot(px-(ax+t*dx),py-(ay+t*dy));
 }
 function circleHitsObs(cx,cy,r,obs){
-    if(Math.hypot(cx-obs.cx,cy-obs.cy)>obs.r+r+10)return false;
-    if(pointInPoly(cx,cy,obs.pts))return true;
+    const dx=wrapDelta(obs.cx,cx,WORLD_W),dy=wrapDelta(obs.cy,cy,WORLD_H);
+    if(Math.hypot(dx,dy)>obs.r+r+10)return false;
+    const tcx=obs.cx+dx,tcy=obs.cy+dy;
+    if(pointInPoly(tcx,tcy,obs.pts))return true;
     const pts=obs.pts;
     for(let i=0,j=pts.length-1;i<pts.length;j=i++){
-        if(distSqPointSeg(cx,cy,pts[j].x,pts[j].y,pts[i].x,pts[i].y)<r)return true;
+        if(distSqPointSeg(tcx,tcy,pts[j].x,pts[j].y,pts[i].x,pts[i].y)<r)return true;
     }
     return false;
 }
@@ -339,7 +341,7 @@ function findPowerupPosition(r){
 function resolveObstacles(obj,radius){
     for(const obs of obstacles){
         if(!circleHitsObs(obj.x,obj.y,radius,obs))continue;
-        let dx=obj.x-obs.cx,dy=obj.y-obs.cy;
+        let dx=wrapDelta(obs.cx,obj.x,WORLD_W),dy=wrapDelta(obs.cy,obj.y,WORLD_H);
         const d=Math.hypot(dx,dy)||1; dx/=d; dy/=d;
         obj.x+=dx*4; obj.y+=dy*4;
         if(obj.vx!==undefined){const dot=obj.vx*dx+obj.vy*dy;if(dot<0){obj.vx-=dot*dx*1.1;obj.vy-=dot*dy*1.1;}}
@@ -349,7 +351,7 @@ function resolveObstacles(obj,radius){
 function obsRepulsion(ox,oy){
     let fx=0,fy=0;
     for(const obs of obstacles){
-        const dx=ox-obs.cx,dy=oy-obs.cy,d=Math.hypot(dx,dy)||1,margin=obs.r+140;
+        const dx=wrapDelta(obs.cx,ox,WORLD_W),dy=wrapDelta(obs.cy,oy,WORLD_H),d=Math.hypot(dx,dy)||1,margin=obs.r+140;
         if(d<margin){const str=(margin-d)/margin*280;fx+=dx/d*str;fy+=dy/d*str;}
     }
     return{fx,fy};
@@ -1450,7 +1452,8 @@ function drawMinimap(){
     mctx.fillStyle='#7fdc8f';
     for(const id in remotePlayers){const rp=remotePlayers[id];if(rp.dead)continue;mctx.beginPath();mctx.arc(rp.x*sx,rp.y*sy,2.5,0,Math.PI*2);mctx.fill();}
     mctx.strokeStyle='rgba(255,255,255,0.65)'; mctx.lineWidth=1;
-    mctx.strokeRect((player.x-viewW/2)*sx,(player.y-viewH/2)*sy,viewW*sx,viewH*sy);
+    const vx=(player.x-viewW/2)*sx,vy=(player.y-viewH/2)*sy,vw=viewW*sx,vh=viewH*sy;
+    for(let ox=-mw;ox<=mw;ox+=mw)for(let oy=-mh;oy<=mh;oy+=mh)mctx.strokeRect(vx+ox,vy+oy,vw,vh);
     mctx.strokeStyle='rgba(255,255,255,0.18)'; mctx.strokeRect(0,0,mw,mh);
 }
 

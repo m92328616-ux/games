@@ -659,7 +659,8 @@ def draw():
             mctx.fill();
         }
         mctx.strokeStyle='rgba(255,255,255,0.65)'; mctx.lineWidth=1;
-        mctx.strokeRect((camX-VIEW_W/2)*mmscx,(camY-VIEW_H/2)*mmscy,VIEW_W*mmscx,VIEW_H*mmscy);
+        const mvx=(camX-VIEW_W/2)*mmscx,mvy=(camY-VIEW_H/2)*mmscy,mvw=VIEW_W*mmscx,mvh=VIEW_H*mmscy;
+        for(let ox=-mw;ox<=mw;ox+=mw)for(let oy=-mh;oy<=mh;oy+=mh)mctx.strokeRect(mvx+ox,mvy+oy,mvw,mvh);
         mctx.strokeStyle='rgba(255,255,255,0.18)'; mctx.strokeRect(0,0,mw,mh);
 
         requestAnimationFrame(loop);
