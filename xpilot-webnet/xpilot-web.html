@@ -5,27 +5,52 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>XPilot - Web</title>
     <style>
+        :root {
+            --hud-font: 14px;
+            --minimap-w: 150;
+            --minimap-h: 113;
+            --minimap-label-font: 10px;
+            --chip-font: 12px;
+            --toast-font: 15px;
+            --btn-size: 36px;
+            --btn-font: 18px;
+            --ctrl-h: 120px;
+            --joystick-size: 100px;
+            --ctrl-btn-w: 90px;
+            --ctrl-btn-h: 40px;
+            --ctrl-btn-font: 12px;
+            --effects-bottom: 130px;
+            --pm-btn-pad: 12px;
+            --pm-btn-font: 14px;
+            --pm-resume-font: 17px;
+            --s-btn-pad: 7px 18px;
+            --s-btn-font: 13px;
+            --upg-buy-pad: 5px 14px;
+            --upg-buy-font: 12px;
+            --m-btn-pad: 6px 16px;
+            --m-btn-font: 13px;
+        }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html, body { width: 100%; height: 100%; overflow: hidden; }
         body { font-family: Arial, sans-serif; background: #0c0c18; }
         #gameContainer { position: fixed; inset: 0; background: #0c0c18; touch-action: none; }
         canvas { display: block; width: 100%; height: 100%; }
-        #info { position: absolute; top: 10px; right: 10px; color: #c8c8c8; font-size: 14px; font-family: monospace; z-index: 100; pointer-events: none; text-align: right; line-height: 1.6; }
+        #info { position: absolute; top: 10px; right: 10px; color: #c8c8c8; font-size: var(--hud-font); font-family: monospace; z-index: 100; pointer-events: none; text-align: right; line-height: 1.6; }
         #deadMsg { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); color: #dcdcdc; font-size: 18px; text-align: center; background: rgba(0,0,0,0.75); padding: 20px; border-radius: 5px; z-index: 200; pointer-events: none; display: none; }
         #minimapWrap { position: absolute; top: 10px; left: 10px; z-index: 100; pointer-events: none; background: rgba(0,0,0,0.5); border: 1px solid #555; border-radius: 4px; padding: 3px; }
         #minimap { display: block; border-radius: 2px; }
-        #minimapLabel { font-family: monospace; font-size: 10px; color: #888; text-align: center; margin-top: 2px; }
-        #effectsBar { position: absolute; bottom: 130px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; z-index: 110; pointer-events: none; flex-wrap: wrap; justify-content: center; max-width: 90vw; }
-        .eff-chip { padding: 3px 9px; border-radius: 20px; font-family: monospace; font-size: 12px; font-weight: bold; border: 1px solid rgba(255,255,255,0.25); white-space: nowrap; }
+        #minimapLabel { font-family: monospace; font-size: var(--minimap-label-font); color: #888; text-align: center; margin-top: 2px; }
+        #effectsBar { position: absolute; bottom: var(--effects-bottom); left: 50%; transform: translateX(-50%); display: flex; gap: 8px; z-index: 110; pointer-events: none; flex-wrap: wrap; justify-content: center; max-width: 90vw; }
+        .eff-chip { padding: 3px 9px; border-radius: 20px; font-family: monospace; font-size: var(--chip-font); font-weight: bold; border: 1px solid rgba(255,255,255,0.25); white-space: nowrap; }
         #toastStack { position: absolute; top: 60px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; z-index: 300; pointer-events: none; }
-        .toast { padding: 7px 18px; border-radius: 6px; font-family: monospace; font-size: 15px; font-weight: bold; border: 1px solid rgba(255,255,255,0.3); background: rgba(10,10,30,0.85); text-align: center; white-space: nowrap; }
+        .toast { padding: 7px 18px; border-radius: 6px; font-family: monospace; font-size: var(--toast-font); font-weight: bold; border: 1px solid rgba(255,255,255,0.3); background: rgba(10,10,30,0.85); text-align: center; white-space: nowrap; }
 
         /* ── Top buttons (symmetric trio) ── */
-        .top-btn { position: absolute; top: 10px; z-index: 110; pointer-events: auto; background: rgba(30,30,50,0.85); border: 1px solid #555; color: #bbb; width: 36px; height: 36px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.15s, color 0.15s; }
+        .top-btn { position: absolute; top: 10px; z-index: 110; pointer-events: auto; background: rgba(30,30,50,0.85); border: 1px solid #555; color: #bbb; width: var(--btn-size); height: var(--btn-size); border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.15s, color 0.15s; }
         .top-btn:hover { background: rgba(80,80,120,0.9); color: #fff; }
-        #settingsBtn { left: calc(50% - 64px); font-size: 18px; }
-        #menuBtn     { left: calc(50% - 18px); font-size: 17px; }
-        #pauseBtn    { left: calc(50% + 28px); font-size: 16px; }
+        #settingsBtn { left: calc(50% - 64px); font-size: var(--btn-font); }
+        #menuBtn     { left: calc(50% - 18px); font-size: calc(var(--btn-font) - 1px); }
+        #pauseBtn    { left: calc(50% + 28px); font-size: calc(var(--btn-font) - 2px); }
 
         /* ── Pause overlay ── */
         #pauseOverlay { display: none; position: fixed; inset: 0; z-index: 400; background: rgba(0,0,0,0.62); backdrop-filter: blur(6px); align-items: center; justify-content: center; }
@@ -34,9 +59,9 @@
         #pauseMenu h1 { font-size: 30px; color: #a0b0ff; letter-spacing: 5px; text-transform: uppercase; margin-bottom: 6px; text-shadow: 0 0 20px rgba(140,160,255,0.4); }
         #pauseMenu .pause-score { font-size: 13px; color: #5060a0; margin-bottom: 30px; }
         #pauseMenu .pause-hint { font-size: 11px; color: #383858; margin-top: 16px; line-height: 1.7; }
-        .pm-btn { display: block; width: 100%; padding: 12px; margin-bottom: 10px; background: #1a1a38; border: 1px solid #4a4a8a; color: #a0b0ff; border-radius: 6px; cursor: pointer; font-family: monospace; font-size: 14px; transition: background 0.15s, color 0.15s; }
+        .pm-btn { display: block; width: 100%; padding: var(--pm-btn-pad); margin-bottom: 10px; background: #1a1a38; border: 1px solid #4a4a8a; color: #a0b0ff; border-radius: 6px; cursor: pointer; font-family: monospace; font-size: var(--pm-btn-font); transition: background 0.15s, color 0.15s; }
         .pm-btn:hover { background: #252550; color: #fff; }
-        .pm-btn.pm-resume { background: #1e3060; border-color: #4060c0; font-size: 17px; font-weight: bold; letter-spacing: 2px; margin-bottom: 16px; }
+        .pm-btn.pm-resume { background: #1e3060; border-color: #4060c0; font-size: var(--pm-resume-font); font-weight: bold; letter-spacing: 2px; margin-bottom: 16px; }
         .pm-btn.pm-resume:hover { background: #2a4080; }
 
         /* ── Menu overlay (shop + profile) ── */
@@ -51,7 +76,7 @@
         .m-row label { font-size: 13px; color: #b0b8d8; flex: 0 0 50px; }
         .m-row input[type=text] { flex: 1; background: #0e0e22; border: 1px solid #3a3a6a; color: #d0d0f0; padding: 6px 9px; border-radius: 4px; font-family: monospace; font-size: 13px; }
         .m-row input[type=text]:focus { outline: none; border-color: #6080ff; }
-        .m-btn { padding: 6px 16px; background: #2a2a5a; border: 1px solid #4a4a8a; color: #a0b0ff; border-radius: 4px; cursor: pointer; font-family: monospace; font-size: 13px; }
+        .m-btn { padding: var(--m-btn-pad); background: #2a2a5a; border: 1px solid #4a4a8a; color: #a0b0ff; border-radius: 4px; cursor: pointer; font-family: monospace; font-size: var(--m-btn-font); }
         .m-btn:hover { background: #3a3a7a; color: #fff; }
         /* Score display in menu */
         #shopScoreRow { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; padding: 8px 12px; background: rgba(40,40,80,0.4); border-radius: 6px; border: 1px solid #2a2a50; }
@@ -65,7 +90,7 @@
         .upg-name { font-size: 13px; color: #c0c8e8; font-weight: bold; }
         .upg-desc { font-size: 11px; color: #5060a0; margin-top: 1px; }
         .upg-price { font-size: 12px; color: #8090b0; white-space: nowrap; flex-shrink: 0; }
-        .upg-buy { padding: 5px 14px; background: #1e3060; border: 1px solid #4060c0; color: #a0b0ff; border-radius: 4px; cursor: pointer; font-family: monospace; font-size: 12px; white-space: nowrap; flex-shrink: 0; transition: background 0.15s; }
+        .upg-buy { padding: var(--upg-buy-pad); background: #1e3060; border: 1px solid #4060c0; color: #a0b0ff; border-radius: 4px; cursor: pointer; font-family: monospace; font-size: var(--upg-buy-font); white-space: nowrap; flex-shrink: 0; transition: background 0.15s; }
         .upg-buy:hover:not(:disabled) { background: #2a4080; color: #fff; }
         .upg-buy:disabled { background: #14142a; border-color: #2a2a50; color: #404060; cursor: not-allowed; }
         .upg-buy.owned { background: #0e2818; border-color: #2a5a34; color: #50a060; cursor: default; }
@@ -83,19 +108,18 @@
         .s-row .s-val { font-size: 12px; color: #7080c0; min-width: 48px; text-align: right; }
         .s-row input[type=range] { flex: 2; accent-color: #6080ff; height: 4px; cursor: pointer; }
         .s-row select { flex: 2; background: #0e0e22; border: 1px solid #3a3a6a; color: #d0d0f0; padding: 5px 8px; border-radius: 4px; font-family: monospace; font-size: 13px; cursor: pointer; }
-        .s-btn { padding: 7px 18px; background: #2a2a5a; border: 1px solid #4a4a8a; color: #a0b0ff; border-radius: 5px; cursor: pointer; font-family: monospace; font-size: 13px; }
+        .s-btn { padding: var(--s-btn-pad); background: #2a2a5a; border: 1px solid #4a4a8a; color: #a0b0ff; border-radius: 5px; cursor: pointer; font-family: monospace; font-size: var(--s-btn-font); }
         .s-btn:hover { background: #3a3a7a; color: #fff; }
         .s-btn.primary { background: #304090; border-color: #6080ff; }
         .s-btn.primary:hover { background: #405098; }
         #zoomDisplay { font-size: 11px; color: #6070a0; text-align: center; margin-top: 4px; }
 
         /* ── Touch controls ── */
-        #controls { position: absolute; bottom: 0; left: 0; right: 0; height: 120px; display: flex; justify-content: space-between; padding: 10px; gap: 10px; pointer-events: none; }
-        .joystick-area { width: 100px; height: 100px; background: rgba(100,100,150,0.3); border: 2px solid #666; border-radius: 50%; pointer-events: auto; }
+        #controls { position: absolute; bottom: 0; left: 0; right: 0; height: var(--ctrl-h); display: flex; justify-content: space-between; padding: 10px; gap: 10px; pointer-events: none; }
+        .joystick-area { width: var(--joystick-size); height: var(--joystick-size); background: rgba(100,100,150,0.3); border: 2px solid #666; border-radius: 50%; pointer-events: auto; }
         .buttons-area { display: flex; flex-direction: column; gap: 5px; pointer-events: auto; }
-        .control-btn { width: 90px; height: 40px; background: rgba(100,150,100,0.3); border: 2px solid #666; color: #aaa; font-size: 12px; border-radius: 5px; touch-action: none; user-select: none; display: flex; align-items: center; justify-content: center; }
-        .control-btn.shoot { flex: 1; width: 90px; height: auto; min-height: 50px; }
-        @media (max-width: 480px) { #info { font-size: 12px; } .control-btn { width: 70px; font-size: 11px; } }
+        .control-btn { width: var(--ctrl-btn-w); height: var(--ctrl-btn-h); background: rgba(100,150,100,0.3); border: 2px solid #666; color: #aaa; font-size: var(--ctrl-btn-font); border-radius: 5px; touch-action: none; user-select: none; display: flex; align-items: center; justify-content: center; }
+        .control-btn.shoot { flex: 1; width: var(--ctrl-btn-w); height: auto; min-height: 50px; }
     </style>
 </head>
 <body>
@@ -261,6 +285,93 @@ const mm=document.getElementById('minimap'), mctx=mm.getContext('2d');
 function resize(){const r=gc.getBoundingClientRect();canvas.width=r.width;canvas.height=r.height;recalcView();}
 resize(); window.addEventListener('resize',resize);
 function wrapDelta(a,b,size){let d=((b-a)%size+size)%size;if(d>size/2)d-=size;return d;}
+
+// ── Device configuration ──────────────────────────────────────────────────
+const DeviceConfig=(function(){
+    const profiles={
+        desktop:{
+            minimapW:180,minimapH:135,hudFont:'14px',minimapLabelFont:'10px',
+            chipFont:'12px',toastFont:'15px',btnSize:'36px',btnFont:'18px',
+            ctrlH:'120px',joystickSize:'100px',ctrlBtnW:'90px',ctrlBtnH:'40px',
+            ctrlBtnFont:'12px',effectsBottom:'130px',
+            pmBtnPad:'12px',pmBtnFont:'14px',pmResumeFont:'17px',
+            sBtnPad:'7px 18px',sBtnFont:'13px',
+            upgBuyPad:'5px 14px',upgBuyFont:'12px',
+            mBtnPad:'6px 16px',mBtnFont:'13px'
+        },
+        tablet:{
+            minimapW:160,minimapH:120,hudFont:'13px',minimapLabelFont:'9px',
+            chipFont:'11px',toastFont:'14px',btnSize:'42px',btnFont:'19px',
+            ctrlH:'130px',joystickSize:'110px',ctrlBtnW:'100px',ctrlBtnH:'48px',
+            ctrlBtnFont:'13px',effectsBottom:'140px',
+            pmBtnPad:'14px',pmBtnFont:'16px',pmResumeFont:'19px',
+            sBtnPad:'9px 20px',sBtnFont:'14px',
+            upgBuyPad:'7px 16px',upgBuyFont:'13px',
+            mBtnPad:'7px 18px',mBtnFont:'14px'
+        },
+        mobile:{
+            minimapW:110,minimapH:83,hudFont:'11px',minimapLabelFont:'8px',
+            chipFont:'10px',toastFont:'13px',btnSize:'44px',btnFont:'20px',
+            ctrlH:'140px',joystickSize:'110px',ctrlBtnW:'105px',ctrlBtnH:'52px',
+            ctrlBtnFont:'14px',effectsBottom:'150px',
+            pmBtnPad:'16px',pmBtnFont:'16px',pmResumeFont:'19px',
+            sBtnPad:'10px 22px',sBtnFont:'15px',
+            upgBuyPad:'8px 18px',upgBuyFont:'14px',
+            mBtnPad:'8px 20px',mBtnFont:'15px'
+        }
+    };
+    let current='desktop';
+    function detect(){
+        const w=Math.min(window.innerWidth,window.innerHeight);
+        const h=Math.max(window.innerWidth,window.innerHeight);
+        const ua=navigator.userAgent||'';
+        const isMobile=/Android|webOS|iPhone|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua)||('ontouchstart' in window&&w<=480);
+        const isTablet=/iPad|Android(?!.*Mobile)/i.test(ua)||(w>480&&w<=900&&('ontouchstart' in window||navigator.maxTouchPoints>1));
+        if(isMobile)return'mobile';
+        if(isTablet)return'tablet';
+        return'desktop';
+    }
+    function apply(){
+        current=detect();
+        const p=profiles[current];
+        const r=document.documentElement.style;
+        r.setProperty('--hud-font',p.hudFont);
+        r.setProperty('--minimap-label-font',p.minimapLabelFont);
+        r.setProperty('--chip-font',p.chipFont);
+        r.setProperty('--toast-font',p.toastFont);
+        r.setProperty('--btn-size',p.btnSize);
+        r.setProperty('--btn-font',p.btnFont);
+        r.setProperty('--ctrl-h',p.ctrlH);
+        r.setProperty('--joystick-size',p.joystickSize);
+        r.setProperty('--ctrl-btn-w',p.ctrlBtnW);
+        r.setProperty('--ctrl-btn-h',p.ctrlBtnH);
+        r.setProperty('--ctrl-btn-font',p.ctrlBtnFont);
+        r.setProperty('--effects-bottom',p.effectsBottom);
+        r.setProperty('--pm-btn-pad',p.pmBtnPad);
+        r.setProperty('--pm-btn-font',p.pmBtnFont);
+        r.setProperty('--pm-resume-font',p.pmResumeFont);
+        r.setProperty('--s-btn-pad',p.sBtnPad);
+        r.setProperty('--s-btn-font',p.sBtnFont);
+        r.setProperty('--upg-buy-pad',p.upgBuyPad);
+        r.setProperty('--upg-buy-font',p.upgBuyFont);
+        r.setProperty('--m-btn-pad',p.mBtnPad);
+        r.setProperty('--m-btn-font',p.mBtnFont);
+        mm.width=p.minimapW; mm.height=p.minimapH;
+    }
+    function getProfile(){return profiles[current];}
+    function getType(){return current;}
+    function registerProfile(name,def){profiles[name]=def;}
+    apply();
+    return{detect,apply,getProfile,getType,registerProfile};
+})();
+let _lastDeviceType=DeviceConfig.getType();
+function onDeviceLayoutChange(){
+    const t=DeviceConfig.getType();
+    if(t!==_lastDeviceType){_lastDeviceType=t;DeviceConfig.apply();}
+    else{DeviceConfig.apply();}
+}
+window.addEventListener('resize',onDeviceLayoutChange);
+window.addEventListener('orientationchange',()=>setTimeout(onDeviceLayoutChange,150));
 
 // ── Seeded RNG (deterministic map for all clients) ─────────────────────────
 function mkRng(seed){
