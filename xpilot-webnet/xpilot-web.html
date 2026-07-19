@@ -1255,15 +1255,19 @@ function draw(){
         const[ox,oy]=w2s(obs.cx,obs.cy);
         if(!onScreen(ox,oy,obs.r*Math.max(scx,scy)+30))continue;
         const s=obs.shade||0;
-        ctx.fillStyle=SF[s]; ctx.strokeStyle=SS[s]; ctx.lineWidth=1.5;
+        ctx.fillStyle=SF[s]; ctx.strokeStyle=SS[s]; ctx.lineWidth=Math.max(0.5,1.5*Math.min(scx,scy));
         ctx.beginPath();
-        const[fx,fy]=w2s(obs.pts[0].x,obs.pts[0].y); ctx.moveTo(fx,fy);
-        for(let i=1;i<obs.pts.length;i++){const[px,py]=w2s(obs.pts[i].x,obs.pts[i].y);ctx.lineTo(px,py);}
+        const[fx,fy]=[ox+wrapDelta(obs.cx,obs.pts[0].x,WORLD_W)*scx,oy+wrapDelta(obs.cy,obs.pts[0].y,WORLD_H)*scy]; ctx.moveTo(fx,fy);
+        for(let i=1;i<obs.pts.length;i++){const px=ox+wrapDelta(obs.cx,obs.pts[i].x,WORLD_W)*scx,py=oy+wrapDelta(obs.cy,obs.pts[i].y,WORLD_H)*scy;ctx.lineTo(px,py);}
         ctx.closePath(); ctx.fill(); ctx.stroke();
-        ctx.strokeStyle=SI[s]; ctx.lineWidth=1; ctx.beginPath();
+        ctx.strokeStyle=SI[s]; ctx.lineWidth=Math.max(0.3,Math.min(scx,scy)); ctx.beginPath();
+        let _hlStarted=false;
         for(let i=0;i<obs.pts.length;i++){
             const pt=obs.pts[i];
-            if(pt.x-obs.cx<0&&pt.y-obs.cy<0){const[px,py]=w2s(pt.x,pt.y);i===0?ctx.moveTo(px,py):ctx.lineTo(px,py);}
+            if(pt.x-obs.cx<0&&pt.y-obs.cy<0){
+                const px=ox+wrapDelta(obs.cx,pt.x,WORLD_W)*scx,py=oy+wrapDelta(obs.cy,pt.y,WORLD_H)*scy;
+                if(!_hlStarted){ctx.moveTo(px,py);_hlStarted=true;}else{ctx.lineTo(px,py);}
+            }
         }
         ctx.stroke();
     }
