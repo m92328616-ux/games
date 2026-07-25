@@ -46,11 +46,12 @@
         .toast { padding: 7px 18px; border-radius: 6px; font-family: monospace; font-size: var(--toast-font); font-weight: bold; border: 1px solid rgba(255,255,255,0.3); background: rgba(10,10,30,0.85); text-align: center; white-space: nowrap; }
 
         /* ── Top buttons (symmetric trio) ── */
-        .top-btn { position: absolute; top: 10px; z-index: 110; pointer-events: auto; background: rgba(30,30,50,0.85); border: 1px solid #555; color: #bbb; width: var(--btn-size); height: var(--btn-size); border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.15s, color 0.15s; }
+        #topBtnGroup { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; z-index: 110; }
+        .top-btn { position: relative; z-index: 110; pointer-events: auto; background: rgba(30,30,50,0.85); border: 1px solid #555; color: #bbb; width: var(--btn-size); height: var(--btn-size); border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.15s, color 0.15s; }
         .top-btn:hover { background: rgba(80,80,120,0.9); color: #fff; }
-        #settingsBtn { left: calc(50% - 64px); font-size: var(--btn-font); }
-        #menuBtn     { left: calc(50% - 18px); font-size: calc(var(--btn-font) - 1px); }
-        #pauseBtn    { left: calc(50% + 28px); font-size: calc(var(--btn-font) - 2px); }
+        #settingsBtn { font-size: var(--btn-font); }
+        #menuBtn     { font-size: calc(var(--btn-font) - 1px); }
+        #pauseBtn    { font-size: calc(var(--btn-font) - 2px); }
 
         /* ── Pause overlay ── */
         #pauseOverlay { display: none; position: fixed; inset: 0; z-index: 400; background: rgba(0,0,0,0.62); backdrop-filter: blur(6px); align-items: center; justify-content: center; }
@@ -120,16 +121,94 @@
         .buttons-area { display: flex; flex-direction: column; gap: 5px; pointer-events: auto; }
         .control-btn { width: var(--ctrl-btn-w); height: var(--ctrl-btn-h); background: rgba(100,150,100,0.3); border: 2px solid #666; color: #aaa; font-size: var(--ctrl-btn-font); border-radius: 5px; touch-action: none; user-select: none; display: flex; align-items: center; justify-content: center; }
         .control-btn.shoot { flex: 1; width: var(--ctrl-btn-w); height: auto; min-height: 50px; }
+
+        /* ── UI Layout Edit Mode ── */
+        .ui-editing #topBtnGroup,
+        .ui-editing #minimapWrap,
+        .ui-editing #info,
+        .ui-editing #controls {
+            outline: 2px dashed rgba(96,128,255,0.6) !important;
+            outline-offset: 4px;
+            cursor: grab;
+            transition: outline-color 0.2s;
+            pointer-events: auto !important;
+            user-select: none !important;
+        }
+        .ui-editing #topBtnGroup:hover,
+        .ui-editing #minimapWrap:hover,
+        .ui-editing #info:hover,
+        .ui-editing #controls:hover {
+            outline-color: rgba(96,128,255,1) !important;
+        }
+        .ui-edit-label {
+            position: absolute;
+            top: -18px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 10px;
+            font-family: monospace;
+            color: #6080ff;
+            background: rgba(10,10,30,0.85);
+            padding: 1px 6px;
+            border-radius: 3px;
+            white-space: nowrap;
+            pointer-events: none;
+            display: none;
+        }
+        .ui-editing .ui-edit-label { display: block; }
+
+        /* ── Edit Layout Toolbar ── */
+        #editLayoutToolbar {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 700;
+            background: rgba(10,10,30,0.94);
+            border-bottom: 1px solid #4a4a8a;
+            padding: 10px 20px;
+            font-family: monospace;
+            color: #d0d0e8;
+            align-items: center;
+            gap: 14px;
+            backdrop-filter: blur(6px);
+        }
+        #editLayoutToolbar.open { display: flex; flex-wrap: wrap; }
+        #editLayoutToolbar .tb-label { font-size: 11px; color: #6070a0; letter-spacing: 1px; text-transform: uppercase; }
+        #editLayoutToolbar .tb-hint { font-size: 10px; color: #404870; }
+        #editLayoutToolbar .tb-btn {
+            padding: 6px 16px;
+            border: 1px solid #4a4a8a;
+            background: #2a2a5a;
+            color: #a0b0ff;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: monospace;
+            font-size: 13px;
+        }
+        #editLayoutToolbar .tb-btn:hover { background: #3a3a7a; color: #fff; }
+        #editLayoutToolbar .tb-btn.save { background: #1e3060; border-color: #4060c0; }
+        #editLayoutToolbar .tb-btn.save:hover { background: #2a4080; }
+        #editLayoutToolbar .tb-btn.cancel { background: #301820; border-color: #804040; color: #d08080; }
+        #editLayoutToolbar .tb-btn.cancel:hover { background: #401828; }
+        #editLayoutToolbar input[type=range] { width: 100px; accent-color: #6080ff; }
+        #editLayoutToolbar .scale-val { font-size: 12px; color: #7080c0; min-width: 36px; }
+        .ui-editing .ui-edit-label {
+            display: block;
+        }
     </style>
 </head>
 <body>
 <div id="gameContainer">
     <canvas id="gameCanvas"></canvas>
     <div id="minimapWrap">
+        <div class="ui-edit-label">Minimap</div>
         <canvas id="minimap" width="150" height="113"></canvas>
         <div id="minimapLabel">minimap</div>
     </div>
     <div id="info">
+        <div class="ui-edit-label">HUD</div>
         Score: <span id="score">0</span><br>
         Fuel: <span id="fuelValue">100/100</span><br>
         <div id="fuelBar" style="width:100px;height:8px;background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.18);border-radius:999px;overflow:hidden;margin:4px 0 6px;"><div id="fuelBarFill" style="height:100%;width:100%;background:#6affc7;transition:width 0.15s ease, background 0.15s ease;"></div></div>
@@ -144,9 +223,12 @@
     <div id="toastStack"></div>
 
     <!-- Top buttons -->
-    <button class="top-btn" id="settingsBtn" title="Settings (pauses game)">⚙</button>
-    <button class="top-btn" id="menuBtn" title="Menu / Shop (M)">☰</button>
-    <button class="top-btn" id="pauseBtn" title="Pause (P)">⏸</button>
+    <div id="topBtnGroup">
+        <div class="ui-edit-label">Top Buttons</div>
+        <button class="top-btn" id="settingsBtn" title="Settings (pauses game)">⚙</button>
+        <button class="top-btn" id="menuBtn" title="Menu / Shop (M)">☰</button>
+        <button class="top-btn" id="pauseBtn" title="Pause (P)">⏸</button>
+    </div>
 
     <!-- Pause overlay -->
     <div id="pauseOverlay">
@@ -205,6 +287,9 @@
             <div class="s-section">Performance</div>
             <div class="s-row"><label>FPS cap</label><input type="range" id="sFps" min="15" max="240" step="5" value="60"><span class="s-val" id="sFpsVal">60</span></div>
             <div class="s-row"><label>Unlimited FPS</label><select id="sFpsUnlimit"><option value="0">Off</option><option value="1">On</option></select></div>
+            <div class="s-section">Button Layout</div>
+            <div class="s-row"><label>Customize positions</label><button class="s-btn" id="sEditLayout">Edit Layout</button></div>
+            <div class="s-row"><label>UI Scale</label><input type="range" id="sGlobalScale" min="0.5" max="2.0" step="0.05" value="1.0"><span class="s-val" id="sGlobalScaleVal">1.0×</span></div>
             <br>
             <div style="display:flex;gap:10px;justify-content:flex-end">
                 <button class="s-btn" id="sReset">Reset defaults</button>
@@ -214,12 +299,25 @@
     </div>
 
     <div id="controls">
+        <div class="ui-edit-label">Touch Controls</div>
         <div class="joystick-area" id="joystick"></div>
         <div class="buttons-area">
             <button class="control-btn" id="thrustBtn">Thrust</button>
             <button class="control-btn shoot" id="shootBtn">SHOOT</button>
             <button class="control-btn" id="restartBtn" style="display:none;">Restart</button>
         </div>
+    </div>
+
+    <!-- Edit Layout Toolbar -->
+    <div id="editLayoutToolbar">
+        <span class="tb-label">UI Edit Mode</span>
+        <span class="tb-hint">Drag elements to reposition</span>
+        <span class="tb-label" style="margin-left:12px">Scale</span>
+        <input type="range" id="editScaleSlider" min="0.5" max="2.0" step="0.05" value="1.0">
+        <span class="scale-val" id="editScaleVal">1.0×</span>
+        <button class="tb-btn" id="editResetBtn">Reset</button>
+        <button class="tb-btn cancel" id="editCancelBtn">Cancel</button>
+        <button class="tb-btn save" id="editSaveBtn">Save</button>
     </div>
 </div>
 <script src="./pickup-system.js"></script>
@@ -1664,6 +1762,190 @@ document.getElementById('pmSettings').addEventListener('click',()=>{
     document.getElementById('settingsOverlay').classList.add('open');
 });
 document.getElementById('pmRestart').addEventListener('click',()=>{closePause();restart();});
+
+// ── UI Layout Customization ────────────────────────────────────────────────
+const UILayout=(function(){
+    const STORAGE_KEY='xpilot_ui_layout_v1';
+    const VERSION=1;
+    const DEFAULTS={
+        topButtons:{left:50,top:1.0,scale:1.0},
+        minimap:{left:1.5,top:1.0,scale:1.0},
+        hud:{left:99,top:1.0,scale:1.0},
+        controls:{left:50,top:94,scale:1.0}
+    };
+    const ANCHORS={topButtons:'50% 0%',minimap:'0% 0%',hud:'100% 0%',controls:'50% 100%'};
+    const LABELS={topButtons:'Top Buttons',minimap:'Minimap',hud:'HUD',controls:'Touch Controls'};
+    let layout=JSON.parse(JSON.stringify(DEFAULTS));
+    let draft=null, editMode=false, dragging=null;
+
+    function el(key){
+        switch(key){
+            case 'topButtons':return document.getElementById('topBtnGroup');
+            case 'minimap':return document.getElementById('minimapWrap');
+            case 'hud':return document.getElementById('info');
+            case 'controls':return document.getElementById('controls');
+        }
+        return null;
+    }
+
+    function load(){
+        try{
+            const raw=localStorage.getItem(STORAGE_KEY);
+            if(raw){
+                const s=JSON.parse(raw);
+                if(s&&s.v===VERSION&&s.l){
+                    for(const k in DEFAULTS){if(s.l[k])layout[k]={...DEFAULTS[k],...s.l[k]};}
+                }
+            }
+        }catch(e){}
+    }
+
+    function saveToDisk(){
+        try{localStorage.setItem(STORAGE_KEY,JSON.stringify({v:VERSION,l:layout}));}catch(e){}
+    }
+
+    function apply(src){
+        for(const k in src){
+            const pos=src[k], e=el(k);
+            if(!e)continue;
+            e.style.position='absolute';
+            e.style.zIndex='110';
+            if(k==='controls'){
+                e.style.left='0';e.style.right='0';
+                e.style.top='auto';e.style.bottom=(100-pos.top)+'%';
+                e.style.transformOrigin='50% 100%';
+                e.style.transform='scale('+pos.scale+')';
+                e.style.pointerEvents='auto';
+            } else {
+                if(k==='hud')e.style.right='auto';
+                e.style.left=pos.left+'%';
+                e.style.top=pos.top+'%';
+                e.style.transformOrigin=ANCHORS[k];
+                let tx='0',ty='0';
+                if(k==='topButtons')tx='-50%';
+                if(k==='hud')tx='-100%';
+                e.style.transform='translate('+tx+','+ty+') scale('+pos.scale+')';
+            }
+        }
+    }
+
+    function applyCurrent(){apply(layout);}
+
+    function clearStyles(){
+        for(const k in DEFAULTS){
+            const e=el(k);if(!e)continue;
+            e.style.position='';e.style.left='';e.style.top='';
+            e.style.transformOrigin='';e.style.transform='';e.style.zIndex='';
+        }
+    }
+
+    function enterEditMode(){
+        if(paused)closePause();
+        editMode=true;
+        draft=JSON.parse(JSON.stringify(layout));
+        document.body.classList.add('ui-editing');
+        apply(draft);
+        document.getElementById('editLayoutToolbar').classList.add('open');
+        const s=draft.topButtons.scale;
+        document.getElementById('editScaleSlider').value=s;
+        document.getElementById('editScaleVal').textContent=s.toFixed(2)+'×';
+    }
+
+    function exitEditMode(){
+        editMode=false;draft=null;dragging=null;
+        document.body.classList.remove('ui-editing');
+        document.getElementById('editLayoutToolbar').classList.remove('open');
+        applyCurrent();
+    }
+
+    function saveDraft(){layout=JSON.parse(JSON.stringify(draft));saveToDisk();exitEditMode();}
+    function cancelEdit(){exitEditMode();}
+    function resetDraft(){
+        draft=JSON.parse(JSON.stringify(DEFAULTS));
+        apply(draft);
+        document.getElementById('editScaleSlider').value=DEFAULTS.topButtons.scale;
+        document.getElementById('editScaleVal').textContent=DEFAULTS.topButtons.scale.toFixed(2)+'×';
+    }
+
+    function applyScale(scale){for(const k in draft)draft[k].scale=scale;apply(draft);}
+
+    function getKeyForTarget(t){
+        if(t.closest('#topBtnGroup'))return'topButtons';
+        if(t.closest('#minimapWrap'))return'minimap';
+        if(t.closest('#info'))return'hud';
+        if(t.closest('#controls'))return'controls';
+        return null;
+    }
+
+    function onDown(e){
+        if(!editMode)return;
+        const t=e.target;
+        const key=getKeyForTarget(t);
+        if(!key)return;
+        e.preventDefault();e.stopPropagation();
+        const cx=e.touches?e.touches[0].clientX:e.clientX;
+        const cy=e.touches?e.touches[0].clientY:e.clientY;
+        dragging={key,sx:cx,sy:cy,ol:draft[key].left,ot:draft[key].top};
+        document.body.style.cursor='grabbing';
+    }
+
+    function onMove(e){
+        if(!dragging||!editMode)return;
+        e.preventDefault();
+        const cx=e.touches?e.touches[0].clientX:e.clientX;
+        const cy=e.touches?e.touches[0].clientY:e.clientY;
+        let nl=dragging.ol+(cx-dragging.sx)/window.innerWidth*100;
+        let nt=dragging.ot+(cy-dragging.sy)/window.innerHeight*100;
+        nl=Math.max(2,Math.min(98,nl));
+        nt=Math.max(2,Math.min(98,nt));
+        draft[dragging.key].left=nl;
+        draft[dragging.key].top=nt;
+        apply(draft);
+    }
+
+    function onUp(){dragging=null;document.body.style.cursor='';}
+
+    document.addEventListener('mousedown',onDown,{passive:false});
+    document.addEventListener('mousemove',onMove,{passive:false});
+    document.addEventListener('mouseup',onUp);
+    document.addEventListener('touchstart',onDown,{passive:false});
+    document.addEventListener('touchmove',onMove,{passive:false});
+    document.addEventListener('touchend',onUp);
+
+    // Block game button clicks during edit mode (but allow toolbar clicks)
+    document.addEventListener('click',function(e){if(editMode&&!e.target.closest('#editLayoutToolbar')){e.stopPropagation();e.preventDefault();}},true);
+
+    // Toolbar buttons
+    document.getElementById('editSaveBtn').addEventListener('click',saveDraft);
+    document.getElementById('editCancelBtn').addEventListener('click',cancelEdit);
+    document.getElementById('editResetBtn').addEventListener('click',resetDraft);
+    document.getElementById('editScaleSlider').addEventListener('input',function(){
+        const v=parseFloat(this.value);
+        document.getElementById('editScaleVal').textContent=v.toFixed(2)+'×';
+        if(editMode&&draft)applyScale(v);
+    });
+
+    // Settings panel button
+    document.getElementById('sEditLayout').addEventListener('click',()=>{closeSettings();enterEditMode();});
+
+    // Global scale slider in settings
+    const gsSlider=document.getElementById('sGlobalScale');
+    const gsVal=document.getElementById('sGlobalScaleVal');
+    if(gsSlider){
+        gsSlider.value=layout.topButtons.scale;
+        gsVal.textContent=layout.topButtons.scale.toFixed(2)+'×';
+        gsSlider.addEventListener('input',function(){
+            const v=parseFloat(this.value);
+            gsVal.textContent=v.toFixed(2)+'×';
+            for(const k in layout)layout[k].scale=v;
+            saveToDisk();applyCurrent();
+        });
+    }
+
+    load();
+    return{applyCurrent,saveToDisk,clearStyles};
+})();
+UILayout.applyCurrent();
 
 // ── Game loop ──────────────────────────────────────────────────────────────
 let last=Date.now();
