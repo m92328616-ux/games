@@ -11,11 +11,12 @@
       color: '#4488ff',
       bg: 'rgba(30,60,200,0.25)',
       duration: 15,
-      hp: 1,
+      hp: 3,
       respawn: 18,
       collectLabel: 'Shield charge',
       effect: true,
       r: 10,
+      deflectionDmg: 1,
     },
     score_mult: {
       label: '🌟 2× Score',

@@ -3,10 +3,24 @@ const assert = require('node:assert/strict');
 const { createPickup, applyBulletDamageToPickup, getPickupRespawnKind, getPickupBlastRadius, getPickupExplosionDelay } = require('../pickup-system.js');
 
 test('fragile pickups are destroyed in one hit', () => {
-  const pickup = createPickup('shield', { x: 100, y: 100, active: true });
+  const pickup = createPickup('score_mult', { x: 100, y: 100, active: true });
   const result = applyBulletDamageToPickup(pickup, 1, { consumeOnImpact: true });
   assert.equal(result.destroyed, true);
   assert.equal(result.shouldConsumeBullet, true);
+  assert.equal(pickup.active, false);
+  assert.equal(pickup.hp, 0);
+});
+
+test('shield pickups survive multiple hits', () => {
+  const pickup = createPickup('shield', { x: 100, y: 100, active: true });
+  const first = applyBulletDamageToPickup(pickup, 1, { consumeOnImpact: true });
+  assert.equal(first.destroyed, false);
+  assert.equal(pickup.hp, 2);
+  const second = applyBulletDamageToPickup(pickup, 1, { consumeOnImpact: true });
+  assert.equal(second.destroyed, false);
+  assert.equal(pickup.hp, 1);
+  const third = applyBulletDamageToPickup(pickup, 1, { consumeOnImpact: true });
+  assert.equal(third.destroyed, true);
   assert.equal(pickup.active, false);
   assert.equal(pickup.hp, 0);
 });

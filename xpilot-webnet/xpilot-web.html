@@ -341,16 +341,17 @@ const MIN_ZOOM=0.25, MAX_ZOOM=3.0, ZOOM_STEP=0.1;
 function recalcView(){viewW=BASE_VIEW_W/zoomLevel;viewH=viewW*(canvas.height/canvas.width);}
 
 // ── Entity counts ──────────────────────────────────────────────────────────
-const N_CIRCLES=14, N_SHOOTERS=8, N_TANKS=5;
+const N_CIRCLES=14, N_SHOOTERS=10, N_TANKS=10;
 
 // ── Pickups (temporary effects + fuel cells) ─────────────────────────────
 const POWERUP_DEFS={
-    shield:     {...PickupSystem.PICKUP_DEFS.shield, label:'🛡 Shield',    color:'#4488ff',bg:'rgba(30,60,200,0.25)', duration:15},
-    score_mult: {...PickupSystem.PICKUP_DEFS.score_mult, label:'🌟 2× Score',  color:'#ffcc00',bg:'rgba(180,140,0,0.25)', duration:12},
+    shield:     {...PickupSystem.PICKUP_DEFS.shield, label:'🛡 Shield',    color:'#4488ff',bg:'rgba(30,60,200,0.25)', duration:45},
+    score_mult: {...PickupSystem.PICKUP_DEFS.score_mult, label:'🌟 2× Score',  color:'#ffcc00',bg:'rgba(180,140,0,0.25)', duration:20},
     fuel_cell:  {...PickupSystem.PICKUP_DEFS.fuel_cell, label:'⛽ Fuel Cell', color:'#7ef0a0',bg:'rgba(40,180,120,0.25)'}
 };
 const POWERUP_KINDS=Object.keys(POWERUP_DEFS);
-const N_CUBES=8;
+const N_CUBES=100;
+const N_SHIELD_CUBES=4;
 
 // ── Permanent upgrades (bought with score) ─────────────────────────────────
 const UPGRADES=[
@@ -626,7 +627,7 @@ function explodeFuelCell(c){
     if(!c || c.kind!=='fuel_cell') return false;
     const blastRadius = PickupSystem.getPickupBlastRadius(c);
     if(blastRadius > 0 && Math.hypot(player.x-c.x, player.y-c.y) < blastRadius){
-        if(hasEffect('shield')){delete activeEffects['shield'];showToast('🛡 Shield Broken!','#4488ff');}
+        if(hasEffect('shield')){absorbShieldHit(1);}
         else{player.dead=true;document.getElementById('restartBtn').style.display='block';}
     }
     c.active=false; c.fuseActive=false; c.fuseTimer=0; c.respawnTimer=PickupSystem.PICKUP_DEFS.fuel_cell.respawn ?? 22;
@@ -635,9 +636,17 @@ function explodeFuelCell(c){
 
 // ── Active effects (temporary only: shield, score_mult) ────────────────────
 let activeEffects={};
+let shieldHp=0;
+const SHIELD_MAX_HP=3;
 function hasEffect(n){return n in activeEffects&&activeEffects[n]>0;}
-function applyEffect(n){const d=POWERUP_DEFS[n];if(!d)return;activeEffects[n]=d.duration;showToast(d.label,d.color);}
-function tickEffects(dt){for(const n in activeEffects){activeEffects[n]-=dt;if(activeEffects[n]<=0)delete activeEffects[n];}}
+function applyEffect(n){const d=POWERUP_DEFS[n];if(!d)return;activeEffects[n]=d.duration;if(n==='shield'){shieldHp=d.hp||SHIELD_MAX_HP;}showToast(d.label,d.color);}
+function tickEffects(dt){for(const n in activeEffects){activeEffects[n]-=dt;if(activeEffects[n]<=0){delete activeEffects[n];if(n==='shield')shieldHp=0;}}}
+function absorbShieldHit(dmg){
+    if(!hasEffect('shield'))return false;
+    shieldHp=Math.max(0,shieldHp-(dmg||1));
+    if(shieldHp<=0){delete activeEffects['shield'];showToast('🛡 Shield Broken!','#4488ff');}
+    return true;
+}
 
 // ── Derived stats (bullet upgrades now from ownedUpgrades) ─────────────────
 function effectiveShootCool(){return ownedUpgrades.has('rapid')?SHOOT_COOL_BASE/3:SHOOT_COOL_BASE;}
@@ -685,13 +694,13 @@ function initGame(){
     player.fuelState = FuelSystem.createFuelState(FUEL_MAX, FUEL_MAX, FUEL_REGEN_RATE, FUEL_IDLE_DELAY);
     // ensure host initializes its hp record for PvP
     if(pvpMode && isHost) playersHP[MY_ID]={hp:PLAYER_MAX_HP,maxHp:PLAYER_MAX_HP,dead:false};
-    playerBullets=[]; enemyBullets=[]; score=0; shootCool=0; activeEffects={};
+    playerBullets=[]; enemyBullets=[]; score=0; shootCool=0; activeEffects={}; shieldHp=0;
     ownedUpgrades=new Set(); laserActive=false;
     entities=[];
     for(let i=0;i<N_CIRCLES;i++) entities.push(mkCircle());
     for(let i=0;i<N_SHOOTERS;i++) entities.push(mkShooter());
     for(let i=0;i<N_TANKS;i++) entities.push(mkTank());
-    powerCubes=Array.from({length:N_CUBES},()=>mkCube());
+    powerCubes=[...Array.from({length:N_SHIELD_CUBES},()=>mkCube('shield')),...Array.from({length:N_CUBES-N_SHIELD_CUBES},()=>mkCube())];
 }
 function restart(){initGame();document.getElementById('restartBtn').style.display='none';document.getElementById('deadMsg').style.display='none';}
 
@@ -1258,7 +1267,7 @@ function update(dt){
             if(c.kind==='fuel_cell'){
                 respawnFuelCell(c);
             } else {
-                const f=mkCube();c.kind=f.kind;c.x=f.x;c.y=f.y;c.r=f.r;c.pulse=f.pulse;c.active=true;c.maxHp=f.maxHp;c.hp=f.hp;c.hitFlash=0;c.destroyFlash=0;
+                const f=mkCube(c.kind);c.kind=f.kind;c.x=f.x;c.y=f.y;c.r=f.r;c.pulse=f.pulse;c.active=true;c.maxHp=f.maxHp;c.hp=f.hp;c.hitFlash=0;c.destroyFlash=0;
             }
         }}
     }
@@ -1313,20 +1322,34 @@ function update(dt){
                     const tankAggressive = e.alerted || (e.lockedTarget && e.lockedTarget.type==='player');
                     const willDamage = tankAggressive || relSpd>CRASH_SPEED;
                     if(willDamage){
-                        if(hasEffect('shield')){ delete activeEffects['shield']; showToast('🛡 Shield Broken!','#4488ff'); }
+                        if(hasEffect('shield')){
+                            const nx=d?dx/d:1,ny=d?dy/d:0;
+                            e.x=player.x+nx*(e.r+12);e.y=player.y+ny*(e.r+12);
+                            e.vx=nx*120;e.vy=ny*120;
+                            e.hp=Math.max(0,e.hp-1);e.hitFlash=0.2;
+                            e.alerted=true;e.alertTimer=6.0;e.lockedTarget={type:'player',id:MY_ID,timer:6.0};
+                            absorbShieldHit(1);
+                        }
                         else {
                             if(pvpMode && !isHost){ if(ws&&ws.readyState===WebSocket.OPEN) ws.send(JSON.stringify({type:'player_hit',id:'enemy:'+e.gen,target:MY_ID,dmg:RAM_DAMAGE})); }
                             else if(pvpMode && isHost){ playersHP[MY_ID] = playersHP[MY_ID]||{hp:PLAYER_MAX_HP,maxHp:PLAYER_MAX_HP,dead:false}; playersHP[MY_ID].hp=Math.max(0,playersHP[MY_ID].hp-RAM_DAMAGE); if(playersHP[MY_ID].hp<=0){ playersHP[MY_ID].dead=true; player.dead=true; document.getElementById('restartBtn').style.display='block'; } try{ ws&&ws.send(JSON.stringify({type:'player_hp',id:MY_ID,hp:playersHP[MY_ID].hp,dead:!!playersHP[MY_ID].dead,killer:'enemy:'+e.gen})); }catch(e){} }
                             else if(!pvpMode){ player.dead=true; document.getElementById('restartBtn').style.display='block'; }
+                            e.alerted=true;e.alertTimer=6.0;e.lockedTarget={type:'player',id:MY_ID,timer:6.0};
                         }
-                        e.alerted=true; e.alertTimer=6.0; e.lockedTarget={type:'player',id:MY_ID,timer:6.0};
                         break;
                     } else {
                         const nx = d?dx/d:1, ny = d?dy/d:0; player.x = e.x + (e.r+9)*nx; player.y = e.y + (e.r+9)*ny; player.vx*=0.6; player.vy*=0.6; continue;
                     }
                 }
                 // Shooters and others: default lethal collision
-                if(hasEffect('shield')){ delete activeEffects['shield']; showToast('🛡 Shield Broken!','#4488ff'); }
+                if(hasEffect('shield')){
+                    const nx=d?dx/d:1,ny=d?dy/d:0;
+                    e.x=player.x+nx*(e.r+12);e.y=player.y+ny*(e.r+12);
+                    e.vx=nx*100;e.vy=ny*100;
+                    e.hp=Math.max(0,e.hp-1);e.hitFlash=0.2;
+                    e.alerted=true;e.alertTimer=6.0;
+                    absorbShieldHit(1);
+                }
                 else{ player.dead=true; document.getElementById('restartBtn').style.display='block'; }
                 break;
             }
@@ -1349,8 +1372,13 @@ function update(dt){
     if(!player.dead){
         for(const b of enemyBullets){
             if(Math.hypot(player.x-b.x,player.y-b.y)<10){
-                if(hasEffect('shield')){delete activeEffects['shield'];showToast('🛡 Shield Broken!','#4488ff');}
+                if(hasEffect('shield')){
+                    b.vx=-b.vx;b.vy=-b.vy;b.dmg=1;b.firedBy='player';
+                    playerBullets.push(b);
+                    absorbShieldHit(1);
+                }
                 else{player.dead=true;document.getElementById('restartBtn').style.display='block';}
+                enemyBullets=enemyBullets.filter(x=>x!==b);
                 break;
             }
         }
