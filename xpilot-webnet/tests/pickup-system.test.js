@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { createPickup, applyBulletDamageToPickup, getPickupRespawnKind, getPickupBlastRadius, getPickupExplosionDelay } = require('../pickup-system.js');
+const { createPickup, applyBulletDamageToPickup, getPickupRespawnKind, getPickupBlastRadius, getPickupExplosionDelay, FUEL_CELL_BLAST_RADIUS } = require('../pickup-system.js');
 
 test('fragile pickups are destroyed in one hit', () => {
   const pickup = createPickup('score_mult', { x: 100, y: 100, active: true });
@@ -37,6 +37,12 @@ test('durable pickups need multiple hits', () => {
 test('fuel cells can be marked for respawn and expose a blast radius', () => {
   const pickup = createPickup('fuel_cell', { x: 120, y: 120, active: true });
   assert.equal(getPickupRespawnKind(pickup), 'fuel_cell');
-  assert.equal(getPickupBlastRadius(pickup), 140);
+  assert.equal(getPickupBlastRadius(pickup), FUEL_CELL_BLAST_RADIUS);
+  assert.ok(FUEL_CELL_BLAST_RADIUS < 140, 'fuel cell blast radius should be smaller than before');
   assert.equal(getPickupExplosionDelay(pickup), 1.4);
+});
+
+test('fuel cell blast radius can be overridden per pickup', () => {
+  const pickup = createPickup('fuel_cell', { x: 120, y: 120, active: true, blastRadius: 60 });
+  assert.equal(getPickupBlastRadius(pickup), 60);
 });

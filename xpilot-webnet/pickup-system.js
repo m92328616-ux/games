@@ -5,6 +5,8 @@
   }
   root.PickupSystem = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
+  const FUEL_CELL_BLAST_RADIUS = 90;
+
   const PICKUP_DEFS = {
     shield: {
       label: '🛡 Shield',
@@ -39,6 +41,7 @@
       effect: false,
       r: 12,
       explosionDelay: 1.4,
+      blastRadius: FUEL_CELL_BLAST_RADIUS,
     },
   };
 
@@ -62,7 +65,7 @@
       pulse: options.pulse ?? 0,
       hitFlash: options.hitFlash ?? 0,
       destroyFlash: options.destroyFlash ?? 0,
-      blastRadius: options.blastRadius ?? (kind === 'fuel_cell' ? 140 : 0),
+      blastRadius: options.blastRadius ?? (kind === 'fuel_cell' ? FUEL_CELL_BLAST_RADIUS : 0),
       respawnKind: options.respawnKind ?? (kind === 'fuel_cell' ? 'fuel_cell' : null),
       fuseActive: options.fuseActive ?? false,
       fuseTimer: options.fuseTimer ?? 0,
@@ -123,7 +126,7 @@
     pickup.maxHp = Number(entry.maxHp ?? pickup.maxHp);
     pickup.active = !!entry.active;
     pickup.respawnTimer = Number(entry.respawnTimer ?? pickup.respawnTimer ?? 0);
-    pickup.blastRadius = Number(entry.blastRadius ?? pickup.blastRadius ?? (pickup.kind === 'fuel_cell' ? 140 : 0));
+    pickup.blastRadius = Number(entry.blastRadius ?? pickup.blastRadius ?? (pickup.kind === 'fuel_cell' ? FUEL_CELL_BLAST_RADIUS : 0));
     pickup.respawnKind = entry.respawnKind ?? pickup.respawnKind ?? (pickup.kind === 'fuel_cell' ? 'fuel_cell' : null);
     pickup.fuseActive = !!(entry.fuseActive ?? pickup.fuseActive ?? false);
     pickup.fuseTimer = Number(entry.fuseTimer ?? pickup.fuseTimer ?? 0);
@@ -137,7 +140,7 @@
   }
 
   function getPickupBlastRadius(pickup) {
-    return Number(pickup?.blastRadius ?? (pickup?.kind === 'fuel_cell' ? 140 : 0));
+    return Number(pickup?.blastRadius ?? (pickup?.kind === 'fuel_cell' ? FUEL_CELL_BLAST_RADIUS : 0));
   }
 
   function getPickupExplosionDelay(pickup) {
@@ -146,6 +149,7 @@
 
   return {
     PICKUP_DEFS,
+    FUEL_CELL_BLAST_RADIUS,
     getPickupDef,
     createPickup,
     applyBulletDamageToPickup,
