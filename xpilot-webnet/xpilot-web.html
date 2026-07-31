@@ -652,11 +652,11 @@ function startFuelCellFuse(c){
 
 function explodeFuelCell(c){
     if(!c || c.kind!=='fuel_cell') return false;
-    const blastRadius = PickupSystem.getPickupBlastRadius(c);
-    if(blastRadius > 0 && Math.hypot(player.x-c.x, player.y-c.y) < blastRadius){
-        if(hasEffect('shield')){absorbShieldHit(1);}
-        else{player.dead=true;document.getElementById('restartBtn').style.display='block';}
-    }
+    const blast = PickupSystem.monitorFuelExplosion(c, player, {
+        isActive: () => hasEffect('shield'),
+        absorbHit: (dmg) => absorbShieldHit(dmg),
+    });
+    if(blast.inBlast && !blast.shielded){ player.dead=true;document.getElementById('restartBtn').style.display='block'; }
     c.active=false; c.fuseActive=false; c.fuseTimer=0; c.respawnTimer=PickupSystem.PICKUP_DEFS.fuel_cell.respawn ?? 22;
     return true;
 }

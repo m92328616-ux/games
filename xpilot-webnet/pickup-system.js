@@ -147,6 +147,25 @@
     return Number(pickup?.explosionDelay ?? (pickup?.kind === 'fuel_cell' ? 1.4 : 0));
   }
 
+  function monitorFuelExplosion(pickup, player, shield) {
+    if (!pickup || pickup.kind !== 'fuel_cell' || !player) {
+      return { inBlast: false, shielded: false };
+    }
+    const blastRadius = getPickupBlastRadius(pickup);
+    if (blastRadius <= 0) {
+      return { inBlast: false, shielded: false };
+    }
+    const inBlast = Math.hypot(player.x - pickup.x, player.y - pickup.y) < blastRadius;
+    if (!inBlast) {
+      return { inBlast: false, shielded: false };
+    }
+    const shielded = !!(shield && typeof shield.isActive === 'function' && shield.isActive());
+    if (shielded && typeof shield.absorbHit === 'function') {
+      shield.absorbHit(1);
+    }
+    return { inBlast: true, shielded };
+  }
+
   return {
     PICKUP_DEFS,
     FUEL_CELL_BLAST_RADIUS,
@@ -158,5 +177,6 @@
     getPickupRespawnKind,
     getPickupBlastRadius,
     getPickupExplosionDelay,
+    monitorFuelExplosion,
   };
 });
