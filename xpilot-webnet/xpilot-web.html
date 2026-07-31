@@ -498,6 +498,32 @@ function buildObstacles(){
         const baseR=80+mapRng()*130,nPts=8+Math.floor(mapRng()*6);
         obs.push({pts:genBlobPts(cx,cy,baseR,nPts,mapRng),cx,cy,r:baseR*1.15,shade:Math.floor(mapRng()*3)});
     }
+    const fillRng=mkRng(0x58506c74^0x9e3779b9);
+    for(let i=0;i<12;i++){
+        const G=100;
+        let bestD=-1,bestX=0,bestY=0;
+        for(let gy=G/2;gy<WORLD_H;gy+=G){
+            for(let gx=G/2;gx<WORLD_W;gx+=G){
+                let d=1e9;
+                for(const o of obs){
+                    const dx=wrapDelta(o.cx,gx,WORLD_W),dy=wrapDelta(o.cy,gy,WORLD_H);
+                    const od=Math.hypot(dx,dy)-o.r;
+                    if(od<d)d=od;
+                }
+                if(d>bestD){bestD=d;bestX=gx;bestY=gy;}
+            }
+        }
+        if(bestD<360)break;
+        let x=bestX+(fillRng()-0.5)*120,y=bestY+(fillRng()-0.5)*120;
+        x=Math.max(120,Math.min(WORLD_W-120,x));
+        y=Math.max(120,Math.min(WORLD_H-120,y));
+        if(Math.hypot(x-SPAWN_CX,y-SPAWN_CY)<CLEAR_R)continue;
+        let ok=true;
+        for(const o of obs){if(Math.hypot(x-o.cx,y-o.cy)<MIN_SEP){ok=false;break;}}
+        if(!ok)continue;
+        const baseR=80+fillRng()*130,nPts=8+Math.floor(fillRng()*6);
+        obs.push({pts:genBlobPts(x,y,baseR,nPts,fillRng),cx:x,cy:y,r:baseR*1.15,shade:Math.floor(fillRng()*3)});
+    }
     return obs;
 }
 const obstacles=buildObstacles();
