@@ -1579,7 +1579,9 @@ function updateEffectsBar(){
 
 // ── Draw ───────────────────────────────────────────────────────────────────
 function draw(){
-    const scx=canvas.width/viewW, scy=canvas.height/viewH;
+    let scx=canvas.width/viewW, scy=canvas.height/viewH;
+    if(!(scx>0)||!isFinite(scx))scx=canvas.width/BASE_VIEW_W;
+    if(!(scy>0)||!isFinite(scy))scy=canvas.height/600;
     const camX=player.x, camY=player.y;
     function w2s(wx,wy){return[(viewW/2+wrapDelta(camX,wx,WORLD_W))*scx,(viewH/2+wrapDelta(camY,wy,WORLD_H))*scy];}
     function onScreen(sx,sy,pad=60){return sx>-pad&&sx<canvas.width+pad&&sy>-pad&&sy<canvas.height+pad;}
@@ -1642,7 +1644,9 @@ function draw(){
         ctx.font=`bold ${Math.round(s*1.1)}px monospace`; ctx.textAlign='center'; ctx.textBaseline='middle';
         ctx.fillText(def.label.slice(0,2),0,0); ctx.restore();
         if(c.kind==='fuel_cell'){
-            const blastRadiusPx=(PickupSystem.getPickupBlastRadius(c)||PickupSystem.FUEL_CELL_BLAST_RADIUS)*scx;
+            const br=Number(PickupSystem.getPickupBlastRadius(c));
+            const brSafe=(Number.isFinite(br)&&br>0)?br:PickupSystem.FUEL_CELL_BLAST_RADIUS;
+            const blastRadiusPx=brSafe*scx;
             const alpha = c.fuseActive ? 0.35 + 0.2*Math.sin(c.pulse*2.5) : 0.18;
             ctx.save(); ctx.strokeStyle=`rgba(255,120,80,${alpha})`; ctx.lineWidth=c.fuseActive?2.2:1.3; ctx.beginPath(); ctx.arc(cx,cy,blastRadiusPx,0,Math.PI*2); ctx.stroke(); ctx.restore();
         }
@@ -2081,6 +2085,37 @@ const UILayout=(function(){
 UILayout.applyCurrent();
 
 // ── Game loop ──────────────────────────────────────────────────────────────
+window.__fatal=null;
+window.onerror=function(msg,src,line,col,err){
+    if(window.__fatal)return false;
+    const detail=(err&&(err.stack||err.message))||msg;
+    window.__fatal=String(detail)+((src&&line)?`\n  at ${src}:${line}`:'');
+    return false;
+};
+window.addEventListener('unhandledrejection',function(ev){
+    if(!window.__fatal)window.__fatal=String((ev.reason&&(ev.reason.stack||ev.reason.message))||ev.reason);
+});
+function renderFatal(){
+    ctx.fillStyle='#0c0c18'; ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.save(); ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillStyle='#ff5555'; ctx.font=`bold ${Math.max(16,canvas.width/40)}px monospace`;
+    ctx.fillText('FATAL ERROR - GAME HALTED',canvas.width/2,canvas.height/2-70);
+    ctx.fillStyle='#ffd7d7'; ctx.font='12px monospace';
+    const text=String(window.__fatal),maxW=canvas.width-80,lines=[],words=text.split('\n');
+    let cur='';
+    for(const word of words){
+        const probe=cur?cur+' '+word:word;
+        if(ctx.measureText(probe).width>maxW&&cur){lines.push(cur);cur=word;}
+        else cur=probe;
+    }
+    if(cur)lines.push(cur);
+    const startY=canvas.height/2-40;
+    lines.slice(0,16).forEach((ln,i)=>ctx.fillText(ln,canvas.width/2,startY+i*16));
+    if(lines.length>16)ctx.fillText(`... (${lines.length-16} more lines)`,canvas.width/2,startY+16*16);
+    ctx.fillStyle='#8a8a8a'; ctx.font='11px monospace';
+    ctx.fillText('Reload the page to retry',canvas.width/2,canvas.height/2+200);
+    ctx.restore();
+}
 let last=Date.now();
 function loop(){
     requestAnimationFrame(loop);
@@ -2088,8 +2123,11 @@ function loop(){
     const minMs=(!unlimitFps&&fpsCap>0)?1000/fpsCap:0;
     if(delta<minMs)return;
     last=now;
-    if(!paused){const dt=Math.min(delta/1000,0.05);update(dt);}
-    draw();
+    if(window.__fatal){renderFatal();return;}
+    try{
+        if(!paused){const dt=Math.min(delta/1000,0.05);update(dt);}
+        draw();
+    }catch(e){if(!window.__fatal)window.__fatal=(e&&(e.stack||e.message))||String(e);}
 }
 initGame();
 loop();
