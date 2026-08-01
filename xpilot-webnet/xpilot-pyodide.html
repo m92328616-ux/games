@@ -87,6 +87,12 @@
 <script async src="https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js"></script>
 <script>
 async function main() {
+    // The pyodide.js <script> above is async; wait for it to finish loading
+    // before touching loadPyodide() (otherwise we get a ReferenceError race).
+    for (let i = 0; i < 400 && typeof loadPyodide === 'undefined'; i++) {
+        await new Promise(r => setTimeout(r, 100));
+    }
+    if (typeof loadPyodide === 'undefined') throw new Error('Pyodide script failed to load');
     const canvas = document.getElementById('gameCanvas');
     const ctx    = canvas.getContext('2d');
     const gc     = document.getElementById('gameContainer');
@@ -333,6 +339,24 @@ def draw():
     const STATE_SEND_HZ = 15;
     let stateSendAccum = 0;
     const REMOTE_TIMEOUT = 8.0;
+    const WORLD_W=3200, WORLD_H=2400;
+    function normAngleDiff(da){return((da+Math.PI)%(Math.PI*2)+Math.PI*2)%(Math.PI*2)-Math.PI;}
+    // Render pose for a network-interpolated remote player. Returns null when
+    // there is no interpolation segment yet (fresh / not yet synced), in which
+    // case callers fall back to raw x/y/angle.
+    // NOTE: _lerp is a number in [0,1]; 0 is a valid freshly-started segment,
+    // so it must NOT be tested with truthiness (!!0 === false) — that caused
+    // remote players to snap to the raw snapshot position on the frame after
+    // each network update and twitch back and forth.
+    function renderPose(o){
+        if(typeof o._lerp!=='number'||!Number.isFinite(o._prevX)||!Number.isFinite(o._prevY))return null;
+        const l=Math.min(1,o._lerp);
+        return{
+            x:o._prevX+wrapDelta(o._prevX,o.x,WORLD_W)*l,
+            y:o._prevY+wrapDelta(o._prevY,o.y,WORLD_H)*l,
+            a:o._prevAngle+normAngleDiff((o.angle||0)-o._prevAngle)*l,
+        };
+    }
 
     function setConnStatus(state, text) {
         netState = state;
@@ -416,11 +440,21 @@ def draw():
     function upsertRemote(id, name, state) {
         if (!state) return;
         const existed = !!remotePlayers[id];
+        const old = existed ? remotePlayers[id] : null;
+        let px = state.x, py = state.y, pa = state.angle || 0, lp = 1;
+        if (old && Number.isFinite(old._prevX)) {
+            const k = Math.min(1, old._lerp || 0);
+            px = old._prevX + wrapDelta(old._prevX, old.x, WORLD_W) * k;
+            py = old._prevY + wrapDelta(old._prevY, old.y, WORLD_H) * k;
+            pa = old._prevAngle + normAngleDiff((old.angle || 0) - old._prevAngle) * k;
+            lp = 0;
+        }
         remotePlayers[id] = {
             x: state.x, y: state.y, angle: state.angle || 0,
             dead: !!state.dead,
             name: name || (remotePlayers[id] && remotePlayers[id].name) || id.slice(0, 6),
             lastUpdate: performance.now() / 1000,
+            _prevX: px, _prevY: py, _prevAngle: pa, _lerp: lp,
         };
         if (!existed) updatePlayerCount();
     }
@@ -473,7 +507,13 @@ def draw():
 
     // ── Game loop ─────────────────────────────────────────────────────────
     let last=Date.now();
+    let rAFLast=0;
     function loop() {
+        requestAnimationFrame(loop);
+        rAFLast=Date.now();
+        frameTick();
+    }
+    function frameTick() {
         const now=Date.now(), dt=Math.min((now-last)/1000,0.05); last=now;
 
         pySetKey('left',  touch.left<-0.5);
@@ -490,6 +530,12 @@ def draw():
         }
         sendNetState(dt, st);
         pruneStaleRemotes();
+
+        // Interpolate remote players toward their latest state snapshots.
+        for (const id in remotePlayers) {
+            const rp = remotePlayers[id];
+            if (rp._lerp !== undefined && rp._lerp < 1) rp._lerp = Math.min(1, rp._lerp + dt * STATE_SEND_HZ);
+        }
 
         const WORLD_W=3200, WORLD_H=2400, VIEW_W=800, VIEW_H=600;
         const scx=canvas.width/VIEW_W, scy=canvas.height/VIEW_H;
@@ -600,12 +646,16 @@ def draw():
         for (const id in remotePlayers) {
             const rp = remotePlayers[id];
             if (rp.dead) continue;
-            const [rx,ry]=w2s(rp.x,rp.y);
+            const ip=renderPose(rp);
+            const rxp=ip?ip.x:rp.x;
+            const ryp=ip?ip.y:rp.y;
+            const rap=ip?ip.a:(rp.angle||0);
+            const [rx,ry]=w2s(rxp,ryp);
             if(!onScreen(rx,ry)) continue;
             ctx.fillStyle='#7fdc8f';
-            const h=[Math.cos(rp.angle),Math.sin(rp.angle)];
-            const r=[Math.cos(rp.angle+2.5),Math.sin(rp.angle+2.5)];
-            const l=[Math.cos(rp.angle-2.5),Math.sin(rp.angle-2.5)];
+            const h=[Math.cos(rap),Math.sin(rap)];
+            const r=[Math.cos(rap+2.5),Math.sin(rap+2.5)];
+            const l=[Math.cos(rap-2.5),Math.sin(rap-2.5)];
             const s=12*scx;
             ctx.beginPath();
             ctx.moveTo(rx+h[0]*s,ry+h[1]*s);
@@ -654,18 +704,43 @@ def draw():
         for (const id in remotePlayers) {
             const rp = remotePlayers[id];
             if (rp.dead) continue;
+            const ip=renderPose(rp);
+            const rxp=ip?ip.x:rp.x;
+            const ryp=ip?ip.y:rp.y;
             mctx.beginPath();
-            mctx.arc(rp.x*mmscx, rp.y*mmscy, 2.5, 0, Math.PI*2);
+            mctx.arc(rxp*mmscx, ryp*mmscy, 2.5, 0, Math.PI*2);
             mctx.fill();
         }
         mctx.strokeStyle='rgba(255,255,255,0.65)'; mctx.lineWidth=1;
         const mvx=(camX-VIEW_W/2)*mmscx,mvy=(camY-VIEW_H/2)*mmscy,mvw=VIEW_W*mmscx,mvh=VIEW_H*mmscy;
         for(let ox=-mw;ox<=mw;ox+=mw)for(let oy=-mh;oy<=mh;oy+=mh)mctx.strokeRect(mvx+ox,mvy+oy,mvw,mvh);
         mctx.strokeStyle='rgba(255,255,255,0.18)'; mctx.strokeRect(0,0,mw,mh);
-
-        requestAnimationFrame(loop);
     }
+    // Watchdog: browsers stop firing requestAnimationFrame on hidden/background
+    // tabs, which freezes the game loop and stops the network heartbeat other
+    // players rely on. setInterval is throttled to ~1 Hz in hidden tabs, so we
+    // drive the fallback from a tiny Web Worker (worker timers are NOT
+    // throttled in hidden tabs) and keep a plain setInterval as a last resort.
+    function startHeartbeat(){
+        try{
+            const wb=new Blob(['setInterval(function(){self.postMessage("tick");},33);']);
+            const worker=new Worker(URL.createObjectURL(wb));
+            worker.onmessage=()=>{if(Date.now()-rAFLast>250)frameTick();};
+            if(worker){window.__hbWorker=worker;return;}
+        }catch(e){}
+        setInterval(()=>{if(Date.now()-rAFLast>250)frameTick();},1000/30);
+    }
+    startHeartbeat();
     loop();
+
+    // Debug/test hook (mirrors the web build's top-level globals).
+    window.__pyodideDebug = {
+        get remotePlayers() { return remotePlayers; },
+        get netState() { return netState; },
+        renderPose,
+        upsertRemote,
+        wrapDelta,
+    };
 }
 main().catch(err=>{ document.getElementById('loading').innerHTML='Error: '+err.message; });
 </script>
