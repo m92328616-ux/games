@@ -861,7 +861,16 @@ function handleNetMessage(msg){
 }
 function upsertRemote(id,name,state){
     if(!state)return;const ex=!!remotePlayers[id];
-    remotePlayers[id]={x:state.x,y:state.y,angle:state.angle||0,dead:!!state.dead,name:name||(remotePlayers[id]?.name)||id.slice(0,6),lastUpdate:performance.now()/1000,hp:(state.hp!==undefined?state.hp:PLAYER_MAX_HP),maxHp:(state.maxHp||PLAYER_MAX_HP),fuelState:state.fuel!==undefined?FuelSystem.createFuelState(state.maxFuel||FUEL_MAX,state.fuel||0,FUEL_REGEN_RATE,FUEL_IDLE_DELAY):undefined};
+    const old=ex?remotePlayers[id]:null;
+    let px=state.x,py=state.y,pa=state.angle||0,lp=1;
+    if(old&&Number.isFinite(old._prevX)){
+        const k=Math.min(1,old._lerp||0);
+        px=old._prevX+wrapDelta(old._prevX,old.x,WORLD_W)*k;
+        py=old._prevY+wrapDelta(old._prevY,old.y,WORLD_H)*k;
+        pa=old._prevAngle+normAngleDiff((old.angle||0)-old._prevAngle)*k;
+        lp=0;
+    }
+    remotePlayers[id]={x:state.x,y:state.y,angle:state.angle||0,dead:!!state.dead,name:name||old?.name||id.slice(0,6),lastUpdate:performance.now()/1000,hp:(state.hp!==undefined?state.hp:PLAYER_MAX_HP),maxHp:(state.maxHp||PLAYER_MAX_HP),fuelState:state.fuel!==undefined?FuelSystem.createFuelState(state.maxFuel||FUEL_MAX,state.fuel||0,FUEL_REGEN_RATE,FUEL_IDLE_DELAY):undefined,_prevX:px,_prevY:py,_prevAngle:pa,_lerp:lp};
     if(!ex)updatePlayerCount();
 }
 function updatePlayerCount(){const n=Object.keys(remotePlayers).length;document.getElementById('playerCount').textContent=n>0?` · ${n} other pilot${n===1?'':'s'} online`:'';}
@@ -916,12 +925,29 @@ function applyHostEntities(hostEntities){
     const VK=new Set(['circle','shooter','tank']);
     if(!hostEntities.every(he=>he&&VK.has(he.kind)&&typeof he.gen==='number'&&typeof he.x==='number'))return;
     if(hostEntities.length!==entities.length){
-        entities=hostEntities.map(he=>{const e=he.kind==='circle'?mkCircle():he.kind==='shooter'?mkShooter():mkTank();Object.assign(e,he);e.hitFlash=0;return e;});return;
+        entities=hostEntities.map(he=>{const e=he.kind==='circle'?mkCircle():he.kind==='shooter'?mkShooter():mkTank();Object.assign(e,he);e.hitFlash=0;e._prevX=e.x;e._prevY=e.y;e._prevAngle=e.angle||0;e._lerp=1;return e;});return;
     }
     for(let i=0;i<entities.length;i++){
         const e=entities[i],he=hostEntities[i];
-        if(e.gen!==he.gen){const ne=he.kind==='circle'?mkCircle():he.kind==='shooter'?mkShooter():mkTank();Object.assign(ne,he);ne.gen=he.gen;ne.hitFlash=0.15;entities[i]=ne;}
-        else{e.x=he.x;e.y=he.y;e.vx=he.vx;e.vy=he.vy;e.angle=he.angle||e.angle;if(he.hp<e.hp){e.hp=he.hp;e.hitFlash=0.15;}else{e.hp=he.hp;}if(he.fireCool!==undefined)e.fireCool=he.fireCool;}
+        if(e.gen!==he.gen){
+            // Respawn elsewhere in the world: snap, don't slide across the map.
+            const ne=he.kind==='circle'?mkCircle():he.kind==='shooter'?mkShooter():mkTank();Object.assign(ne,he);ne.gen=he.gen;ne.hitFlash=0.15;
+            ne._prevX=he.x;ne._prevY=he.y;ne._prevAngle=he.angle||0;ne._lerp=1;
+            entities[i]=ne;
+        } else {
+            // Start a new interpolation segment from where we last rendered.
+            if(!Number.isFinite(e._prevX)){
+                e._prevX=e.x;e._prevY=e.y;e._prevAngle=e.angle||0;e._lerp=1;
+            }
+            const k=Math.min(1,e._lerp||0);
+            e._prevX=e._prevX+wrapDelta(e._prevX,e.x,WORLD_W)*k;
+            e._prevY=e._prevY+wrapDelta(e._prevY,e.y,WORLD_H)*k;
+            e._prevAngle=e._prevAngle+normAngleDiff((e.angle||0)-e._prevAngle)*k;
+            e.x=he.x;e.y=he.y;e.vx=he.vx;e.vy=he.vy;e.angle=he.angle||e.angle;
+            e._lerp=0;
+            if(he.hp<e.hp){e.hp=he.hp;e.hitFlash=0.15;}else{e.hp=he.hp;}
+            if(he.fireCool!==undefined)e.fireCool=he.fireCool;
+        }
     }
 }
 function sendNetEntities(dt){
@@ -996,6 +1022,22 @@ function nearestEntity(x,y){
     return best;
 }
 function normAngleDiff(da){return((da+Math.PI)%(Math.PI*2)+Math.PI*2)%(Math.PI*2)-Math.PI;}
+// Render pose for a network-interpolated object (entity or remote player).
+// Returns null when the object has no interpolation segment yet (freshly
+// created / not yet synced), in which case callers fall back to raw x/y/angle.
+// NOTE: _lerp is a number in [0,1]; 0 is a valid, freshly-started segment,
+// so we must NOT test it with truthiness (!!0 === false) — that was causing
+// entities to snap to the raw snapshot position on the frame after each
+// network update and twitch back and forth.
+function renderPose(o){
+    if(typeof o._lerp!=='number'||!Number.isFinite(o._prevX)||!Number.isFinite(o._prevY))return null;
+    const l=Math.min(1,o._lerp);
+    return{
+        x:o._prevX+wrapDelta(o._prevX,o.x,WORLD_W)*l,
+        y:o._prevY+wrapDelta(o._prevY,o.y,WORLD_H)*l,
+        a:o._prevAngle+normAngleDiff((o.angle||0)-o._prevAngle)*l,
+    };
+}
 
 // ── Enemy AI ───────────────────────────────────────────────────────────────
 function closestTarget(ex,ey){
@@ -1293,7 +1335,16 @@ function update(dt){
             }
         }
     } else {
-        for(const e of entities)if(e.hitFlash>0)e.hitFlash-=dt;
+        for(const e of entities){
+            if(e.hitFlash>0)e.hitFlash-=dt;
+            if(e._lerp!==undefined&&e._lerp<1)e._lerp=Math.min(1,e._lerp+dt*ENTITY_SEND_HZ);
+        }
+    }
+
+    // Interpolate remote players toward their latest state snapshots.
+    for(const id in remotePlayers){
+        const rp=remotePlayers[id];
+        if(rp._lerp!==undefined&&rp._lerp<1)rp._lerp=Math.min(1,rp._lerp+dt*STATE_SEND_HZ);
     }
 
     // Host: entity vs entity ramming (tanks kill attackers by ramming)
@@ -1621,7 +1672,10 @@ function draw(){
     // Enemy view-radius ring
     if(!player.dead){
         for(const e of entities){
-            const[ex,ey]=w2s(e.x,e.y);if(!onScreen(ex,ey,e.r*scx+20))continue;
+            const ip=renderPose(e);
+            const rx=ip?ip.x:e.x;
+            const ry=ip?ip.y:e.y;
+            const[ex,ey]=w2s(rx,ry);if(!onScreen(ex,ey,e.r*scx+20))continue;
             const{dist}=closestTarget(e.x,e.y);
             const baseV = (e.baseViewRadius!==undefined)?e.baseViewRadius:(e.viewRadius||0);
             const activeV = baseV + (e.alerted?(e.alertBoost||0):0);
@@ -1662,7 +1716,11 @@ function draw(){
 
     // Entities
     for(const e of entities){
-        const[ex,ey]=w2s(e.x,e.y);if(!onScreen(ex,ey,e.r*scx+10))continue;
+        const ip=renderPose(e);
+        const rx=ip?ip.x:e.x;
+        const ry=ip?ip.y:e.y;
+        const ra=ip?ip.a:(e.angle||0);
+        const[ex,ey]=w2s(rx,ry);if(!onScreen(ex,ey,e.r*scx+10))continue;
         const fl=Math.min(1,Math.max(0,e.hitFlash/0.15));
         const fc=base=>{const r=parseInt(base.slice(1,3),16),g=parseInt(base.slice(3,5),16),b=parseInt(base.slice(5,7),16);return`rgb(${Math.round(r+(255-r)*fl)},${Math.round(g+(255-g)*fl)},${Math.round(b+(255-b)*fl)})`;};
         const spd=Math.hypot(e.vx,e.vy);
@@ -1678,14 +1736,14 @@ function draw(){
         if(e.kind==='circle'){
             ctx.fillStyle=fc('#c87878'); ctx.beginPath(); ctx.arc(ex,ey,e.r*scx,0,Math.PI*2); ctx.fill();
             ctx.strokeStyle='rgba(255,255,255,0.4)'; ctx.lineWidth=1.5;
-            ctx.beginPath(); ctx.moveTo(ex,ey); ctx.lineTo(ex+Math.cos(e.angle)*e.r*scx,ey+Math.sin(e.angle)*e.r*scx); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(ex,ey); ctx.lineTo(ex+Math.cos(ra)*e.r*scx,ey+Math.sin(ra)*e.r*scx); ctx.stroke();
         } else if(e.kind==='shooter'){
             ctx.fillStyle=fc('#f0a050'); ctx.strokeStyle=fl>0.1?'#fff':'#ffcc80'; ctx.lineWidth=1;
-            const s=e.r*scx,h=[Math.cos(e.angle),Math.sin(e.angle)],rv=[Math.cos(e.angle+2.3),Math.sin(e.angle+2.3)],lv=[Math.cos(e.angle-2.3),Math.sin(e.angle-2.3)];
+            const s=e.r*scx,h=[Math.cos(ra),Math.sin(ra)],rv=[Math.cos(ra+2.3),Math.sin(ra+2.3)],lv=[Math.cos(ra-2.3),Math.sin(ra-2.3)];
             ctx.beginPath(); ctx.moveTo(ex+h[0]*s*1.2,ey+h[1]*s*1.2); ctx.lineTo(ex+rv[0]*s*0.9,ey+rv[1]*s*0.9); ctx.lineTo(ex+lv[0]*s*0.9,ey+lv[1]*s*0.9); ctx.closePath(); ctx.fill(); ctx.stroke();
         } else {
             ctx.fillStyle=fc('#9b59b6'); ctx.strokeStyle=fl>0.1?'#fff':'#c39bd3'; ctx.lineWidth=1.5;
-            const s=e.r*scx; ctx.save(); ctx.translate(ex,ey); ctx.rotate(e.angle+Math.PI/4);
+            const s=e.r*scx; ctx.save(); ctx.translate(ex,ey); ctx.rotate(ra+Math.PI/4);
             ctx.fillRect(-s,-s,s*2,s*2); ctx.strokeRect(-s,-s,s*2,s*2); ctx.restore();
         }
         if(e.maxHp>1&&e.hp<e.maxHp){
@@ -1729,11 +1787,15 @@ function draw(){
     // Remote players
     for(const id in remotePlayers){
         const rp=remotePlayers[id]; if(rp.dead)continue;
-        const[rx,ry]=w2s(rp.x,rp.y); if(!onScreen(rx,ry))continue;
+        const ip=renderPose(rp);
+        const rx=ip?ip.x:rp.x;
+        const ry=ip?ip.y:rp.y;
+        const ra=ip?ip.a:(rp.angle||0);
+        const[rx2,ry2]=w2s(rx,ry); if(!onScreen(rx2,ry2))continue;
         ctx.fillStyle='#7fdc8f';
-        const h=[Math.cos(rp.angle),Math.sin(rp.angle)],rv=[Math.cos(rp.angle+2.5),Math.sin(rp.angle+2.5)],lv=[Math.cos(rp.angle-2.5),Math.sin(rp.angle-2.5)],s=12*scx;
-        ctx.beginPath();ctx.moveTo(rx+h[0]*s,ry+h[1]*s);ctx.lineTo(rx+rv[0]*s*0.7,ry+rv[1]*s*0.7);ctx.lineTo(rx+lv[0]*s*0.7,ry+lv[1]*s*0.7);ctx.closePath();ctx.fill();
-        ctx.fillStyle='#9fe0a8';ctx.font='11px monospace';ctx.textAlign='center';ctx.fillText(rp.name||id.slice(0,6),rx,ry-18*scx);
+        const h=[Math.cos(ra),Math.sin(ra)],rv=[Math.cos(ra+2.5),Math.sin(ra+2.5)],lv=[Math.cos(ra-2.5),Math.sin(ra-2.5)],s=12*scx;
+        ctx.beginPath();ctx.moveTo(rx2+h[0]*s,ry2+h[1]*s);ctx.lineTo(rx2+rv[0]*s*0.7,ry2+rv[1]*s*0.7);ctx.lineTo(rx2+lv[0]*s*0.7,ry2+lv[1]*s*0.7);ctx.closePath();ctx.fill();
+        ctx.fillStyle='#9fe0a8';ctx.font='11px monospace';ctx.textAlign='center';ctx.fillText(rp.name||id.slice(0,6),rx2,ry2-18*scx);
     }
     ctx.fillStyle='#90f0a0';
     for(const b of remoteBullets){const[bx,by]=w2s(b.x,b.y);if(!onScreen(bx,by,20))continue;ctx.beginPath();ctx.arc(bx,by,3*scx,0,Math.PI*2);ctx.fill();}
@@ -1789,14 +1851,16 @@ function drawMinimap(){
     }
     for(const c of powerCubes){if(!c.active)continue;mctx.fillStyle=POWERUP_DEFS[c.kind].color;mctx.fillRect(c.x*sx-2,c.y*sy-2,4,4);}
     for(const e of entities){
-        const mx=e.x*sx,my=e.y*sy;
+        const ip=renderPose(e);
+        const mx=(ip?ip.x:e.x)*sx;
+        const my=(ip?ip.y:e.y)*sy;
         if(e.kind==='circle'){mctx.fillStyle='rgba(200,120,120,0.75)';mctx.fillRect(mx-1,my-1,2,2);}
         else if(e.kind==='shooter'){mctx.fillStyle='#f0a050';mctx.fillRect(mx-1,my-1,3,3);}
         else{mctx.fillStyle='#b07fe0';mctx.fillRect(mx-2,my-2,4,4);}
     }
     if(!player.dead){mctx.fillStyle='#b4c8ff';mctx.beginPath();mctx.arc(player.x*sx,player.y*sy,3,0,Math.PI*2);mctx.fill();}
     mctx.fillStyle='#7fdc8f';
-    for(const id in remotePlayers){const rp=remotePlayers[id];if(rp.dead)continue;mctx.beginPath();mctx.arc(rp.x*sx,rp.y*sy,2.5,0,Math.PI*2);mctx.fill();}
+    for(const id in remotePlayers){const rp=remotePlayers[id];if(rp.dead)continue;const ip=renderPose(rp);mctx.beginPath();mctx.arc((ip?ip.x:rp.x)*sx,(ip?ip.y:rp.y)*sy,2.5,0,Math.PI*2);mctx.fill();}
     mctx.strokeStyle='rgba(255,255,255,0.65)'; mctx.lineWidth=1;
     const vx=(player.x-viewW/2)*sx,vy=(player.y-viewH/2)*sy,vw=viewW*sx,vh=viewH*sy;
     for(let ox=-mw;ox<=mw;ox+=mw)for(let oy=-mh;oy<=mh;oy+=mh)mctx.strokeRect(vx+ox,vy+oy,vw,vh);
@@ -2117,8 +2181,8 @@ function renderFatal(){
     ctx.restore();
 }
 let last=Date.now();
-function loop(){
-    requestAnimationFrame(loop);
+let rAFLast=0;
+function frameTick(){
     const now=Date.now(),delta=now-last;
     const minMs=(!unlimitFps&&fpsCap>0)?1000/fpsCap:0;
     if(delta<minMs)return;
@@ -2129,6 +2193,37 @@ function loop(){
         draw();
     }catch(e){if(!window.__fatal)window.__fatal=(e&&(e.stack||e.message))||String(e);}
 }
+function loop(){
+    requestAnimationFrame(loop);
+    rAFLast=Date.now();
+    frameTick();
+}
+// Watchdog: browsers stop firing requestAnimationFrame on hidden/background
+// tabs, which silently freezes the whole game loop — including the network
+// heartbeat that tells other players where you are (and stops your own view
+// from updating). Fall back to a timer whenever rAF goes quiet so live player
+// movement keeps flowing even when the tab isn't the active one.
+//
+// setInterval is throttled to ~1 Hz in hidden tabs, so we drive the fallback
+// from a tiny Web Worker instead (worker timers are NOT throttled in hidden
+// tabs) and keep a plain setInterval as a last resort.
+function startHeartbeat(){
+    try{
+        const wb=new Blob(['setInterval(function(){self.postMessage("tick");},33);']);
+        const worker=new Worker(URL.createObjectURL(wb));
+        worker.onmessage=()=>{if(Date.now()-rAFLast>250)frameTick();};
+        if(worker){window.__hbWorker=worker;return;}
+    }catch(e){}
+    setInterval(()=>{if(Date.now()-rAFLast>250)frameTick();},1000/30);
+}
+startHeartbeat();
+// Send one last position snapshot when the tab is hidden so other players
+// still see you at your current spot even before the fallback timer runs.
+document.addEventListener('visibilitychange',()=>{
+    if(document.hidden&&ws&&ws.readyState===WebSocket.OPEN&&player&&Number.isFinite(player.x)){
+        try{ws.send(JSON.stringify({type:'state',id:MY_ID,name:myName,x:player.x,y:player.y,angle:player.angle,vx:player.vx,vy:player.vy,dead:player.dead,fuel:player.fuelState.fuel,maxFuel:player.fuelState.maxFuel}));}catch(e){}
+    }
+});
 initGame();
 loop();
 </script>
