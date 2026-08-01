@@ -890,7 +890,15 @@ function upsertServerPickup(entry){
 }
 function applyServerPickupList(pickups){
     if(!Array.isArray(pickups))return;
-    powerCubes=(pickups||[]).map(p=>serverPickupFromEntry(p));
+    // Reuse existing cube objects so animation state (pulse, hitFlash, ...)
+    // survives periodic snapshots instead of snapping back on every one.
+    const byId=new Map();
+    for(const c of (powerCubes||[]))byId.set(c.id,c);
+    powerCubes=pickups.map(entry=>{
+        const existing=byId.get(entry.id);
+        if(existing){PickupSystem.hydratePickup(existing,entry);return existing;}
+        return serverPickupFromEntry(entry);
+    });
 }
 function sendPickupRequest(pickupId){
     if(!ws||ws.readyState!==WebSocket.OPEN)return;
