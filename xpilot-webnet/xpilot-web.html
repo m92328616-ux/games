@@ -376,7 +376,11 @@ const STATE_SEND_HZ=15; let stateSendAccum=0; const REMOTE_TIMEOUT=8.0;
 let allKnownIds=new Set([MY_ID]), isHost=true;
 function reelectHost(){isHost=([...allKnownIds].sort()[0]===MY_ID);}
 const ENTITY_SEND_HZ=12; let entitySendAccum=0;
-const PICKUP_SEND_HZ=8; let pickupSendAccum=0;
+// Server-authoritative pickups: when true, the relay server owns power-up
+// state (spawns, respawns, collection, damage) and the client only renders
+// what the server sends.
+let serverPickupsActive=false; let serverPickupSeq=0;
+const PICKUP_REQUEST_INTERVAL=0.25; let pickupRequestCooldowns={};
 
 // ── Canvas ─────────────────────────────────────────────────────────────────
 const canvas=document.getElementById('gameCanvas'), ctx=canvas.getContext('2d');
@@ -629,6 +633,10 @@ function mkCube(kindOverride){
     return PickupSystem.createPickup(kind,{id:`${kind}-${nextGen()}`,x,y,r:POWERUP_DEFS[kind].r ?? 10,pulse:Math.random()*Math.PI*2,active:true,respawnTimer:0});
 }
 
+function makeLocalPowerCubes(){
+    return [...Array.from({length:N_SHIELD_CUBES},()=>mkCube('shield')),...Array.from({length:N_FUEL_CELLS},()=>mkCube('fuel_cell')),...Array.from({length:N_CUBES-N_SHIELD_CUBES-N_FUEL_CELLS},()=>mkCube())];
+}
+
 function respawnFuelCell(c){
     const {x,y}=findPowerupPosition(POWERUP_DEFS.fuel_cell.r ?? 12);
     c.kind='fuel_cell';
@@ -727,7 +735,9 @@ function initGame(){
     for(let i=0;i<N_CIRCLES;i++) entities.push(mkCircle());
     for(let i=0;i<N_SHOOTERS;i++) entities.push(mkShooter());
     for(let i=0;i<N_TANKS;i++) entities.push(mkTank());
-    powerCubes=[...Array.from({length:N_SHIELD_CUBES},()=>mkCube('shield')),...Array.from({length:N_FUEL_CELLS},()=>mkCube('fuel_cell')),...Array.from({length:N_CUBES-N_SHIELD_CUBES-N_FUEL_CELLS},()=>mkCube())];
+    // In multiplayer the relay server owns power-up state, so only seed
+    // local pickups when running single-player / before first snapshot.
+    powerCubes = serverPickupsActive ? (powerCubes||[]) : makeLocalPowerCubes();
 }
 function restart(){initGame();document.getElementById('restartBtn').style.display='none';document.getElementById('deadMsg').style.display='none';}
 
@@ -752,6 +762,12 @@ function connectMultiplayer(url){
         if(netState!=='error')setConnStatus('offline','Offline (single player)');
         for(const id of [...allKnownIds]){if(id!==MY_ID)allKnownIds.delete(id);}
         for(const id in remotePlayers)delete remotePlayers[id];
+        // Return to local (single-player) power-up simulation when the
+        // authoritative server disappears.
+        if(serverPickupsActive){
+            serverPickupsActive=false;serverPickupSeq=0;pickupRequestCooldowns={};
+            if(powerCubes)powerCubes=makeLocalPowerCubes();
+        }
         reelectHost(); updatePlayerCount();
     };
 }
@@ -792,7 +808,39 @@ function handleNetMessage(msg){
     if(msg.type==='state'){if(msg.id===MY_ID)return;if(!allKnownIds.has(msg.id)){allKnownIds.add(msg.id);reelectHost();}upsertRemote(msg.id,msg.name,msg);return;}
     if(msg.type==='shoot'){if(msg.id!==MY_ID)remoteBullets.push({x:msg.x,y:msg.y,vx:msg.vx,vy:msg.vy,life:2.2,owner:msg.id});return;}
     if(msg.type==='enemies'){if(msg.id!==MY_ID&&!isHost)applyHostEntities(msg.entities||[]);return;}
-    if(msg.type==='pickups'){if(msg.id!==MY_ID&&!isHost)applyHostPickups(msg.pickups||[]);return;}
+    // ── Server-authoritative power-up messages ──
+    if(msg.type==='pickup_state'){
+        serverPickupsActive=true;
+        if(msg.seq!==undefined&&msg.seq<serverPickupSeq)return; // ignore stale snapshots
+        if(msg.seq!==undefined)serverPickupSeq=msg.seq;
+        applyServerPickupList(msg.pickups||[]);
+        return;
+    }
+    if(msg.type==='pickup_spawned'){upsertServerPickup(msg.pickup);return;}
+    if(msg.type==='pickup_picked'){
+        if(msg.pickup)upsertServerPickup(msg.pickup);
+        if(msg.by===MY_ID&&msg.kind){
+            if(msg.kind==='fuel_cell'){
+                score+=25;
+                if(player.fuelState){player.fuelState.fuel=player.fuelState.maxFuel;player.fuelState.idleTimer=0;}
+                showToast('⛽ Fuel Cell secured','#7ef0a0');
+            } else { applyEffect(msg.kind); }
+        }
+        return;
+    }
+    if(msg.type==='pickup_damaged'){
+        if(msg.pickup)upsertServerPickup(msg.pickup);
+        if(msg.destroyed&&msg.primed)showToast('⛽ Fuel Cell primed','#7ef0a0');
+        return;
+    }
+    if(msg.type==='pickup_exploded'){
+        if(msg.pickup)upsertServerPickup(msg.pickup);
+        const blastRadius=msg.blastRadius||PickupSystem.FUEL_CELL_BLAST_RADIUS;
+        if(!player.dead&&Math.hypot(wrapDelta(player.x,msg.x,WORLD_W),wrapDelta(player.y,msg.y,WORLD_H))<blastRadius){
+            if(!hasEffect('shield')){player.dead=true;document.getElementById('restartBtn').style.display='block';}
+        }
+        return;
+    }
     if(msg.type==='hit'){
         if(!isHost||msg.id===MY_ID)return;
         const e=entities[msg.idx];if(!e)return;
@@ -829,21 +877,31 @@ function serializeEntities(){
         return d;
     });
 }
-function serializePickups(){
-    return (powerCubes||[]).map(c=>PickupSystem.serializePickup(c));
+// ── Server-authoritative power-up sync ─────────────────────────────────────
+function serverPickupFromEntry(entry){
+    return PickupSystem.createPickup(entry.kind,{...entry});
 }
-function applyHostPickups(hostPickups){
-    if(!Array.isArray(hostPickups)) return;
-    if(!powerCubes || powerCubes.length !== hostPickups.length){
-        powerCubes = hostPickups.map(p=>PickupSystem.createPickup(p.kind,p));
-        return;
-    }
-    for(let i=0;i<hostPickups.length;i++){
-        const entry=hostPickups[i];
-        const local=powerCubes[i];
-        if(!local) continue;
-        PickupSystem.hydratePickup(local, entry);
-    }
+function upsertServerPickup(entry){
+    if(!entry||!entry.id)return;
+    if(!powerCubes)powerCubes=[];
+    const local=powerCubes.find(c=>c.id===entry.id);
+    if(!local){powerCubes.push(serverPickupFromEntry(entry));return;}
+    PickupSystem.hydratePickup(local,entry);
+}
+function applyServerPickupList(pickups){
+    if(!Array.isArray(pickups))return;
+    powerCubes=(pickups||[]).map(p=>serverPickupFromEntry(p));
+}
+function sendPickupRequest(pickupId){
+    if(!ws||ws.readyState!==WebSocket.OPEN)return;
+    const t=performance.now()/1000;
+    if(pickupRequestCooldowns[pickupId]&&t-pickupRequestCooldowns[pickupId]<PICKUP_REQUEST_INTERVAL)return;
+    pickupRequestCooldowns[pickupId]=t;
+    ws.send(JSON.stringify({type:'pickup_request',id:MY_ID,pickupId}));
+}
+function sendPickupHit(pickupId,dmg,firedBy){
+    if(!ws||ws.readyState!==WebSocket.OPEN)return;
+    ws.send(JSON.stringify({type:'pickup_hit',id:MY_ID,pickupId,dmg:dmg||1,firedBy:firedBy||'player'}));
 }
 function applyHostEntities(hostEntities){
     if(!Array.isArray(hostEntities)||!hostEntities.length)return;
@@ -862,11 +920,6 @@ function sendNetEntities(dt){
     if(!ws||ws.readyState!==WebSocket.OPEN||!isHost)return;
     entitySendAccum+=dt;if(entitySendAccum<1/ENTITY_SEND_HZ)return;
     entitySendAccum=0;ws.send(JSON.stringify({type:'enemies',id:MY_ID,entities:serializeEntities()}));
-}
-function sendNetPickups(dt){
-    if(!ws||ws.readyState!==WebSocket.OPEN||!isHost||!powerCubes)return;
-    pickupSendAccum+=dt;if(pickupSendAccum<1/PICKUP_SEND_HZ)return;
-    pickupSendAccum=0;ws.send(JSON.stringify({type:'pickups',id:MY_ID,pickups:serializePickups()}));
 }
 function sendHit(idx,gen){if(!ws||ws.readyState!==WebSocket.OPEN||isHost)return;ws.send(JSON.stringify({type:'hit',id:MY_ID,idx,gen}));}
 function sendNetState(dt){
@@ -1284,8 +1337,11 @@ function update(dt){
     }
 
     // — Power cube respawn —
+    // While the relay server is authoritative, spawns/respawns/fuses are
+    // decided server-side; the client only animates pulse/flash locally.
     for(const c of powerCubes){
         c.pulse+=dt*2.5;
+        if(serverPickupsActive)continue;
         if(c.kind==='fuel_cell' && c.fuseActive){
             c.fuseTimer-=dt;
             if(c.fuseTimer<=0){ explodeFuelCell(c); }
@@ -1305,6 +1361,12 @@ function update(dt){
             if(!c.active && !c.fuseActive)continue;
             if(Math.hypot(player.x-c.x,player.y-c.y)<c.r+10){
                 if(c.kind==='fuel_cell' && c.fuseActive) continue;
+                if(serverPickupsActive){
+                    // Server-authoritative: report the collect attempt and wait
+                    // for the server to confirm before applying any effect.
+                    sendPickupRequest(c.id);
+                    continue;
+                }
                 c.active=false;c.respawnTimer=18+Math.random()*8;
                 if(c.kind==='fuel_cell'){
                     score+=25;
@@ -1448,16 +1510,21 @@ function update(dt){
         for(const c of powerCubes){
             if(!c.active) continue;
             if(Math.hypot(wrapDelta(b.x,c.x,WORLD_W),wrapDelta(b.y,c.y,WORLD_H)) < c.r + (b.r||3) - 2){
-                const result = PickupSystem.applyBulletDamageToPickup(c, b.dmg || 1, {consumeOnImpact:true, hitFlash:0.18, destroyFlash:0.24});
-                c.hitFlash = Math.max(c.hitFlash || 0, 0.18);
-                c.destroyFlash = result.destroyed ? 0.24 : (c.destroyFlash || 0);
-                if(result.destroyed){
-                    const def = POWERUP_DEFS[c.kind];
-                    if(c.kind==='fuel_cell'){
-                        startFuelCellFuse(c);
-                        showToast('⛽ Fuel Cell primed','#7ef0a0');
-                    } else {
-                        showToast(`${def?.label || c.kind} destroyed`, def?.color || '#fff');
+                if(serverPickupsActive){
+                    // Server-authoritative: report the hit, server applies damage.
+                    sendPickupHit(c.id,b.dmg||1,'player');
+                } else {
+                    const result = PickupSystem.applyBulletDamageToPickup(c, b.dmg || 1, {consumeOnImpact:true, hitFlash:0.18, destroyFlash:0.24});
+                    c.hitFlash = Math.max(c.hitFlash || 0, 0.18);
+                    c.destroyFlash = result.destroyed ? 0.24 : (c.destroyFlash || 0);
+                    if(result.destroyed){
+                        const def = POWERUP_DEFS[c.kind];
+                        if(c.kind==='fuel_cell'){
+                            startFuelCellFuse(c);
+                            showToast('⛽ Fuel Cell primed','#7ef0a0');
+                        } else {
+                            showToast(`${def?.label || c.kind} destroyed`, def?.color || '#fff');
+                        }
                     }
                 }
                 playerBullets = playerBullets.filter(x=>x!==b);
@@ -1469,10 +1536,14 @@ function update(dt){
         for(const c of powerCubes){
             if(!c.active) continue;
             if(Math.hypot(wrapDelta(b.x,c.x,WORLD_W),wrapDelta(b.y,c.y,WORLD_H)) < c.r + 4){
-                const result = PickupSystem.applyBulletDamageToPickup(c, 1, {consumeOnImpact:true, hitFlash:0.16, destroyFlash:0.2});
-                c.hitFlash = Math.max(c.hitFlash || 0, 0.16);
-                c.destroyFlash = result.destroyed ? 0.2 : (c.destroyFlash || 0);
-                if(result.destroyed){ const def = POWERUP_DEFS[c.kind]; if(c.kind==='fuel_cell'){ startFuelCellFuse(c); showToast('⛽ Fuel Cell primed','#7ef0a0'); } else { showToast(`${def?.label || c.kind} destroyed`, def?.color || '#fff'); } }
+                if(serverPickupsActive){
+                    sendPickupHit(c.id,1,'enemy');
+                } else {
+                    const result = PickupSystem.applyBulletDamageToPickup(c, 1, {consumeOnImpact:true, hitFlash:0.16, destroyFlash:0.2});
+                    c.hitFlash = Math.max(c.hitFlash || 0, 0.16);
+                    c.destroyFlash = result.destroyed ? 0.2 : (c.destroyFlash || 0);
+                    if(result.destroyed){ const def = POWERUP_DEFS[c.kind]; if(c.kind==='fuel_cell'){ startFuelCellFuse(c); showToast('⛽ Fuel Cell primed','#7ef0a0'); } else { showToast(`${def?.label || c.kind} destroyed`, def?.color || '#fff'); } }
+                }
                 enemyBullets = enemyBullets.filter(x=>x!==b);
                 break;
             }
@@ -1483,7 +1554,6 @@ function update(dt){
 
     sendNetState(dt);
     sendNetEntities(dt);
-    sendNetPickups(dt);
     pruneStaleRemotes();
     updateEffectsBar();
 }

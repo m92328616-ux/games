@@ -16,6 +16,9 @@ Protocol (JSON messages, one per WebSocket text frame):
      "dead": bool}
     {"type": "shoot", "id": "...", "x":.., "y":.., "vx":.., "vy":..}
     {"type": "enemies", "id": "...", "enemies": [...] }   # new: host broadcasts enemy state
+    {"type": "pickup_request", "id": "...", "pickupId": "..."}  # collect a power-up
+    {"type": "pickup_hit", "id": "...", "pickupId": "...", "dmg": int,
+     "firedBy": "player"|"enemy"}                            # bullet damaged a power-up
     {"type": "leave", "id": "..."}
 
   Server -> Clients (broadcast to everyone except sender, plus a couple
@@ -26,6 +29,19 @@ Protocol (JSON messages, one per WebSocket text frame):
     {"type": "player_joined", "id": "...", "name": "..."}
     {"type": "player_left", "id": "..."}
     {"type": "roster", "players": [...]}              (sent to the joiner only)
+
+  Server -> Clients (server-authoritative power-up sync):
+    {"type": "pickup_state", "seq": int, "pickups": [...]}       (full snapshot)
+    {"type": "pickup_spawned", "pickup": {...}}
+    {"type": "pickup_picked", "pickup": {...}, "by": "...", "kind": "..."}
+    {"type": "pickup_damaged", "pickup": {...}, "by": "...",
+     "destroyed": bool, "primed": bool}
+    {"type": "pickup_exploded", "pickup": {...}, "x":.., "y":.., "blastRadius":..}
+
+  The relay server is the sole authority for power-up state: it owns the
+  spawn/respawn timers, assigns unique IDs, validates collection and
+  damage requests, and periodically broadcasts snapshots so clients stay
+  in sync (and late joiners receive the current state immediately).
 
 Usage:
     pip install websockets
@@ -41,6 +57,7 @@ import socketserver
 import threading
 
 from log_interface import get_logger, start_log_server, stop_log_server
+from pickup_sync import PowerUpManager
 
 log = get_logger("WSServer")
 
@@ -56,6 +73,12 @@ except ImportError:
 # id -> {"ws": websocket, "name": str, "last_state": dict|None, "last_seen": float}
 CLIENTS = {}
 CLIENTS_LOCK = asyncio.Lock()
+
+# Server-authoritative power-up state (see pickup_sync.py). Owned by the
+# relay server so every client sees identical power-ups at identical spots.
+POWERUP_MANAGER: "PowerUpManager | None" = None
+POWERUP_TICK_DT = 0.1          # simulation step for respawn/fuse timers
+POWERUP_SYNC_HZ = 4.0          # authoritative full-state snapshot rate
 
 # Drop clients we haven't heard from in this many seconds (covers
 # browser tab closes / network drops that don't cleanly close the
@@ -123,6 +146,13 @@ async def handler(ws):
                     }
                 log.info(f"Client joined: {client_id} ({name})")
                 await send_roster(ws, client_id)
+                # Send the joiner the authoritative power-up state immediately
+                # so they spawn with the exact same pickups as everyone else.
+                if POWERUP_MANAGER is not None:
+                    try:
+                        await ws.send(json.dumps(POWERUP_MANAGER.snapshot_message()))
+                    except Exception:
+                        pass
                 await broadcast(
                     {"type": "player_joined", "id": client_id, "name": name},
                     exclude_id=client_id,
@@ -155,6 +185,42 @@ async def handler(ws):
                 cid = msg.get("id")
                 await broadcast(msg, exclude_id=cid)
 
+            elif mtype == "pickup_request":
+                # Client wants to collect a power-up. The server validates the
+                # request (pickup must exist, be active, and the client must be
+                # close enough) and broadcasts the result to everyone.
+                cid = msg.get("id")
+                pid = msg.get("pickupId")
+                if not cid or not pid or POWERUP_MANAGER is None:
+                    continue
+                player_pos = None
+                async with CLIENTS_LOCK:
+                    if cid not in CLIENTS:
+                        continue
+                    last_state = CLIENTS[cid]["last_state"]
+                    if last_state is not None and last_state.get("x") is not None:
+                        player_pos = (last_state.get("x"), last_state.get("y"))
+                    CLIENTS[cid]["last_seen"] = now()
+                ev = POWERUP_MANAGER.try_collect(pid, cid, player_pos)
+                if ev:
+                    await broadcast(ev)
+
+            elif mtype == "pickup_hit":
+                # A bullet hit a power-up. The server validates and applies the
+                # damage, then broadcasts the authoritative result.
+                cid = msg.get("id")
+                pid = msg.get("pickupId")
+                if not cid or not pid or POWERUP_MANAGER is None:
+                    continue
+                async with CLIENTS_LOCK:
+                    if cid not in CLIENTS:
+                        continue
+                    CLIENTS[cid]["last_seen"] = now()
+                dmg = msg.get("dmg", 1)
+                ev = POWERUP_MANAGER.apply_damage(pid, dmg, cid)
+                if ev:
+                    await broadcast(ev)
+
             elif mtype == "hit":
                 # Non-host client reports a bullet hit on entity idx; relay to host
                 cid = msg.get("id")
@@ -181,6 +247,21 @@ async def handler(ws):
                 CLIENTS.pop(client_id, None)
             log.info(f"Client left: {client_id}")
             await broadcast({"type": "player_left", "id": client_id})
+
+
+async def powerup_loop():
+    """Server-authoritative power-up simulation + periodic snapshots."""
+    if POWERUP_MANAGER is None:
+        return
+    snap_accum = 0.0
+    while True:
+        await asyncio.sleep(POWERUP_TICK_DT)
+        for ev in POWERUP_MANAGER.tick(POWERUP_TICK_DT):
+            await broadcast(ev)
+        snap_accum += POWERUP_TICK_DT
+        if snap_accum >= 1.0 / POWERUP_SYNC_HZ:
+            snap_accum = 0.0
+            await broadcast(POWERUP_MANAGER.snapshot_message())
 
 
 async def reap_stale_clients():
@@ -236,11 +317,16 @@ def start_http_status(http_port):
 
 
 async def main(host, port, http_port):
+    global POWERUP_MANAGER
     if http_port:
         t = threading.Thread(target=start_http_status, args=(http_port,), daemon=True)
         t.start()
 
+    POWERUP_MANAGER = PowerUpManager()
+    log.info(f"Server-authoritative power-up system active: {len(POWERUP_MANAGER.pickups)} pickups")
+
     asyncio.create_task(reap_stale_clients())
+    asyncio.create_task(powerup_loop())
 
     async with websockets.serve(handler, host, port, ping_interval=10, ping_timeout=10):
         log.info(f"XPilot WebSocket relay listening on ws://{host}:{port}")
