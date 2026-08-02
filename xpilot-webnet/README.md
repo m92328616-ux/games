@@ -354,6 +354,61 @@ from the same URL.
 
 ---
 
+## In-game chat / log
+
+Every version of the game now shows an in-game chat/log panel that tells
+you what's happening beyond your own ship:
+
+- **Deaths & kills** — "`A` was destroyed by `B`", plus "`You` were
+  destroyed by `X`" on your own ship.
+- **Joins / leaves** — when players come and go.
+- **Power-up pickups** — when anyone grabs one.
+- **Chat** — typed messages from other players.
+
+### Desktop (`xpilot.py`)
+
+A small semi-transparent log appears bottom-left showing the last few
+events (deaths, joins, self-deaths). It's informational only — no chat
+input, since the UDP relay has no name/chat protocol. Entries fade out
+after ~12 seconds; the buffer holds up to 40 entries.
+
+### Web versions (`xpilot-web.html`, `xpilot-pyodide.html`)
+
+A collapsible log panel sits bottom-left above a chat bar:
+
+- **`T`** — focus the chat input.
+- **Type + `Enter`** — send a message to every player.
+- **`Esc`** — blur the chat input and resume flying.
+- Click the **log header** to show/hide the panel.
+
+The **Settings** menu (gear icon) has a **Chat / Log** section:
+
+- **Log visible** — show or hide the panel.
+- **Show timestamps** — prefix each entry with local `HH:MM:SS`.
+- **Max messages** — how many entries to keep (default 60).
+
+Chat/log state is resettable from the settings **Reset** button like any
+other preference.
+
+### How it works (web)
+
+The WebSocket relay (`ws_server.py`) is the source of truth for events:
+
+- A **`log_history`** message replays recent events to a late joiner.
+- A **`game_event`** message carries one server-authored event with a
+  monotonically increasing `seq`, `event` type (`join`, `leave`, `death`,
+  `chat`, `pickup`, ...), and payload fields like `name`, `killer`,
+  `killerName`, and `text`.
+- Clients send **`chat`** messages; the server strips/normalizes them and
+  re-broadcasts them as `game_event` messages of type `chat` so everyone
+  (including the sender) sees a consistent stream.
+
+Client-side, `game-log.js` (`LogBuffer` + `GameLogUI`) de-duplicates by
+`seq`, fills out-of-order gaps, keeps only the most recent `maxMessages`,
+and renders each event type with its own color/icon.
+
+---
+
 ## Synchronized screens (enemies in the same place for everyone)
 
 **`xpilot-web.html`** now uses host-authoritative entity synchronization so

@@ -45,6 +45,18 @@ Protocol (JSON messages, one per WebSocket text frame):
      "destroyed": bool, "primed": bool}
     {"type": "pickup_exploded", "pickup": {...}, "x":.., "y":.., "blastRadius":..}
 
+  Server -> Clients (in-game chat/log, issue #32):
+    {"type": "chat", "text": "..."}                    (client chat)
+    {"type": "log_history", "events": [game_event, ...]}  (sent to a late joiner)
+    {"type": "game_event", "seq": int, "time": epoch-ms,
+     "event": "join"|"leave"|"death"|"chat"|"pickup", ...}
+
+  The relay server owns the in-game chat/log: it assigns every logged event
+  a monotonically increasing "seq", keeps a bounded replay history that late
+  joiners receive immediately, and re-broadcasts each event to *all*
+  clients (including whoever caused it) so every player sees the same
+  messages at the same time.
+
   The relay server is the sole authority for power-up state: it owns the
   spawn/respawn timers, assigns unique IDs, validates collection and
   damage requests, and periodically broadcasts snapshots so clients stay
@@ -58,6 +70,7 @@ Usage:
 import argparse
 import asyncio
 import json
+import math
 import time
 import http.server
 import socketserver
@@ -99,6 +112,85 @@ POWERUP_SYNC_HZ = 4.0          # authoritative full-state snapshot rate
 # browser tab closes / network drops that don't cleanly close the
 # socket).
 STALE_TIMEOUT = 15.0
+
+# ---------------------------------------------------------------------------
+# In-game chat/log (issue #32)
+#
+# The relay server is the single source of truth for the in-game log. Every
+# logged event gets a monotonically increasing `seq` (clients de-duplicate
+# and order by it), is kept in a bounded replay history that late joiners
+# receive, and is re-broadcast to *all* clients — including whoever caused
+# it — so everyone sees the same messages at the same time.
+#
+# Payloads are {"type": "game_event", "seq": int, "time": epoch-ms,
+# "event": "join"|"leave"|"death"|"chat"|"pickup", ...}.
+# ---------------------------------------------------------------------------
+GAME_EVENT_MAX_HISTORY = 200      # bound on the replay history sent to joiners
+CHAT_MAX_LEN = 240                # cap on one chat message
+EVENT_HISTORY = []                # list[dict] of game_event payloads (newest last)
+EVENT_SEQ = 0                     # monotonic game_event sequence counter
+DEAD_PLAYERS = {}                 # id -> True while a player is eliminated
+
+
+def reset_game_events():
+    """Reset the in-game log state (used by tests and on server restart)."""
+    global EVENT_SEQ
+    EVENT_HISTORY.clear()
+    DEAD_PLAYERS.clear()
+    EVENT_SEQ = 0
+
+
+def _make_game_event(event, **fields):
+    """Author a game_event payload: assign seq/time and record in history."""
+    global EVENT_SEQ
+    EVENT_SEQ += 1
+    payload = {
+        "type": "game_event",
+        "seq": EVENT_SEQ,
+        "time": int(time.time() * 1000),
+        "event": event,
+    }
+    payload.update(fields)
+    EVENT_HISTORY.append(payload)
+    if len(EVENT_HISTORY) > GAME_EVENT_MAX_HISTORY:
+        del EVENT_HISTORY[: len(EVENT_HISTORY) - GAME_EVENT_MAX_HISTORY]
+    return payload
+
+
+async def _lookup_name(cid):
+    """Return a client's display name (fallback: its id prefix)."""
+    if not cid:
+        return None
+    async with CLIENTS_LOCK:
+        info = CLIENTS.get(cid)
+    if info and info.get("name"):
+        return info["name"]
+    return None
+
+
+async def _broadcast_to_all(message_obj):
+    """Send a server-originated message to every connected client."""
+    data = json.dumps(message_obj)
+    dead = []
+    async with CLIENTS_LOCK:
+        targets = [(cid, info["ws"]) for cid, info in CLIENTS.items()]
+    for cid, ws in targets:
+        try:
+            await ws.send(data)
+        except Exception:
+            dead.append(cid)
+    if dead:
+        async with CLIENTS_LOCK:
+            for cid in dead:
+                CLIENTS.pop(cid, None)
+
+
+async def broadcast_game_event(event, **fields):
+    """Author a game_event (with seq/time), log it, and send it to everyone."""
+    payload = _make_game_event(event, **fields)
+    log.info(f"[game:{event}] {json.dumps(fields, default=str)}")
+    await _broadcast_to_all(payload)
+    return payload
 
 
 def now():
@@ -161,6 +253,16 @@ async def handler(ws):
                     }
                 log.info(f"Client joined: {client_id} ({name})")
                 await send_roster(ws, client_id)
+                # Send the joiner the recent in-game log so the chat/kill feed
+                # isn't empty for late joiners.
+                if EVENT_HISTORY:
+                    try:
+                        await ws.send(json.dumps({
+                            "type": "log_history",
+                            "events": list(EVENT_HISTORY),
+                        }))
+                    except Exception:
+                        pass
                 # Send the joiner the authoritative power-up state immediately
                 # so they spawn with the exact same pickups as everyone else.
                 if POWERUP_MANAGER is not None:
@@ -172,6 +274,7 @@ async def handler(ws):
                     {"type": "player_joined", "id": client_id, "name": name},
                     exclude_id=client_id,
                 )
+                await broadcast_game_event("join", id=client_id, name=name)
 
             elif mtype == "state":
                 cid = msg.get("id")
@@ -212,13 +315,29 @@ async def handler(ws):
                 async with CLIENTS_LOCK:
                     if cid not in CLIENTS:
                         continue
-                    last_state = CLIENTS[cid]["last_state"]
-                    if last_state is not None and last_state.get("x") is not None:
-                        player_pos = (last_state.get("x"), last_state.get("y"))
+                    # Prefer the position the client claims in the request
+                    # itself: the relayed last_state can be stale by a
+                    # state-send interval plus network latency, which made
+                    # legitimate pickups uncollectable on remote clients.
+                    cx, cy = msg.get("x"), msg.get("y")
+                    if isinstance(cx, (int, float)) and isinstance(cy, (int, float)) \
+                            and math.isfinite(cx) and math.isfinite(cy):
+                        player_pos = (cx, cy)
+                    else:
+                        last_state = CLIENTS[cid]["last_state"]
+                        if last_state is not None and last_state.get("x") is not None:
+                            player_pos = (last_state.get("x"), last_state.get("y"))
                     CLIENTS[cid]["last_seen"] = now()
                 ev = POWERUP_MANAGER.try_collect(pid, cid, player_pos)
                 if ev:
                     await broadcast(ev)
+                    if ev.get("type") == "pickup_picked":
+                        await broadcast_game_event(
+                            "pickup",
+                            id=ev.get("by"),
+                            name=await _lookup_name(ev.get("by")),
+                            item=ev.get("kind"),
+                        )
 
             elif mtype == "pickup_hit":
                 # A bullet hit a power-up. The server validates and applies the
@@ -263,14 +382,51 @@ async def handler(ws):
                     async with CLIENTS_LOCK:
                         if client_id in CLIENTS:
                             CLIENTS[client_id]["last_seen"] = now()
+                if mtype == "player_hp":
+                    victim = msg.get("id")
+                    if victim:
+                        if msg.get("dead") and not DEAD_PLAYERS.get(victim):
+                            # First elimination of this player since their last
+                            # respawn: publish a death event to the in-game log.
+                            DEAD_PLAYERS[victim] = True
+                            killer = msg.get("killer") or None
+                            await broadcast_game_event(
+                                "death",
+                                id=victim,
+                                name=await _lookup_name(victim),
+                                killer=killer,
+                                killerName=(await _lookup_name(killer) if killer else None),
+                            )
+                        elif not msg.get("dead"):
+                            DEAD_PLAYERS[victim] = False
                 await broadcast(msg, exclude_id=client_id)
+
+            elif mtype == "chat":
+                # Player chat: the server authors a "chat" game_event so every
+                # client (including the sender) shows the same message.
+                if not client_id:
+                    continue
+                text = (msg.get("text") or "").strip()[:CHAT_MAX_LEN]
+                if not text:
+                    continue
+                async with CLIENTS_LOCK:
+                    if client_id in CLIENTS:
+                        CLIENTS[client_id]["last_seen"] = now()
+                await broadcast_game_event(
+                    "chat",
+                    id=client_id,
+                    name=await _lookup_name(client_id),
+                    text=text,
+                )
 
             elif mtype == "leave":
                 cid = msg.get("id")
                 if cid:
+                    cname = await _lookup_name(cid)
                     async with CLIENTS_LOCK:
                         CLIENTS.pop(cid, None)
                     await broadcast({"type": "player_left", "id": cid})
+                    await broadcast_game_event("leave", id=cid, name=cname)
 
             # unknown message types are ignored
 
@@ -278,10 +434,14 @@ async def handler(ws):
         pass
     finally:
         if client_id:
+            cname = None
             async with CLIENTS_LOCK:
-                CLIENTS.pop(client_id, None)
+                info = CLIENTS.pop(client_id, None)
+                if info:
+                    cname = info["name"]
             log.info(f"Client left: {client_id}")
             await broadcast({"type": "player_left", "id": client_id})
+            await broadcast_game_event("leave", id=client_id, name=cname)
 
 
 async def powerup_loop():
@@ -305,15 +465,18 @@ async def reap_stale_clients():
         await asyncio.sleep(5)
         cutoff = now() - STALE_TIMEOUT
         stale = []
+        stale_names = {}
         async with CLIENTS_LOCK:
             for cid, info in CLIENTS.items():
                 if info["last_seen"] < cutoff:
                     stale.append(cid)
+                    stale_names[cid] = info.get("name")
             for cid in stale:
                 CLIENTS.pop(cid, None)
         for cid in stale:
             log.warning(f"Client timed out: {cid}")
             await broadcast({"type": "player_left", "id": cid})
+            await broadcast_game_event("leave", id=cid, name=stale_names.get(cid))
 
 
 def start_http_status(http_port):
@@ -358,6 +521,7 @@ async def main(host, port, http_port):
         t.start()
 
     POWERUP_MANAGER = PowerUpManager()
+    reset_game_events()
     log.info(f"Server-authoritative power-up system active: {len(POWERUP_MANAGER.pickups)} pickups")
 
     asyncio.create_task(reap_stale_clients())

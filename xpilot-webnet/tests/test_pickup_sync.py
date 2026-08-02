@@ -216,6 +216,31 @@ class PickupSyncTest(unittest.TestCase):
             await a.close()
         self.run_coro(scenario())
 
+    def test_collection_uses_claimed_position_when_state_is_stale(self):
+        # A remote client's relayed last_state can lag behind its real
+        # position by a state-send interval plus network latency. The client
+        # therefore sends its current x/y with the pickup_request; the server
+        # must validate against that claim, not the stale last_state.
+        async def scenario():
+            a = await self.connect("A")
+            snap = await self.snapshot(a)
+            target = next(p for p in snap["pickups"] if p["active"])
+            pid = target["id"]
+
+            # last_state says the player is far away...
+            await self.send_state(a, "A", far_position(target))
+            # ...but the player claims to be right on the pickup.
+            await a.send(json.dumps({
+                "type": "pickup_request", "id": "A", "pickupId": pid,
+                "x": target["x"], "y": target["y"],
+            }))
+            ev = await self.next_of_type(a, "pickup_picked")
+            self.assertEqual(ev["by"], "A")
+            self.assertEqual(ev["pickup"]["id"], pid)
+            self.assertFalse(ev["pickup"]["active"])
+            await a.close()
+        self.run_coro(scenario())
+
     def test_late_joiner_receives_current_state(self):
         async def scenario():
             a = await self.connect("A")

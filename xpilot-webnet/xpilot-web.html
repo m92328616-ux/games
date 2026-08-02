@@ -45,6 +45,76 @@
         #toastStack { position: absolute; top: 60px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; z-index: 300; pointer-events: none; }
         .toast { padding: 7px 18px; border-radius: 6px; font-family: monospace; font-size: var(--toast-font); font-weight: bold; border: 1px solid rgba(255,255,255,0.3); background: rgba(10,10,30,0.85); text-align: center; white-space: nowrap; }
 
+        /* ── In-game chat / log (issue #32) ── */
+        #gameLogPanel {
+            position: absolute; left: 50%; bottom: 178px; transform: translateX(-50%);
+            width: min(520px, 82vw); height: 26vh; min-height: 90px; max-height: 38vh;
+            display: flex; flex-direction: column;
+            background: rgba(8,8,22,0.72); border: 1px solid rgba(90,90,150,0.4);
+            border-radius: 6px; z-index: 130; pointer-events: auto;
+            backdrop-filter: blur(3px); overflow: hidden;
+        }
+        #gameLogHeader {
+            display: flex; align-items: center; gap: 8px; padding: 3px 10px;
+            font-family: monospace; font-size: 11px; color: #6070a0;
+            border-bottom: 1px solid rgba(90,90,150,0.25); cursor: pointer; user-select: none;
+            background: rgba(20,20,45,0.5);
+        }
+        #gameLogTitle { letter-spacing: 1px; text-transform: uppercase; flex: 1; }
+        #gameLogCount { color: #5060a0; }
+        #gameLogList {
+            flex: 1; overflow-y: auto; padding: 4px 6px;
+            font-family: monospace; font-size: 12px; line-height: 1.5;
+            scrollbar-width: thin;
+        }
+        .gl-row { display: flex; align-items: baseline; gap: 6px; border-left: 3px solid transparent; padding-left: 6px; }
+        .gl-time { color: #5060a0; font-size: 10px; flex-shrink: 0; }
+        .gl-icon { flex-shrink: 0; }
+        .gl-text { color: #d8d8e8; word-break: break-word; }
+        #chatBar {
+            position: absolute; left: 50%; bottom: 138px; transform: translateX(-50%);
+            width: min(520px, 82vw); z-index: 131; pointer-events: auto;
+        }
+        #chatInput {
+            width: 100%; padding: 6px 10px; font-family: monospace; font-size: 13px;
+            background: rgba(10,10,28,0.85); color: #e8e8f0;
+            border: 1px solid rgba(90,90,150,0.5); border-radius: 5px; outline: none;
+        }
+        #chatInput:focus { border-color: #6080ff; }
+        #chatInput::placeholder { color: #50587a; }
+
+        /* ── Floating chat window + mobile sidebar ── */
+        #chatWindow {
+            position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+            width: min(170px, 36vw); height: min(205px, 36vh); min-height: 120px;
+            display: none; flex-direction: column;
+            background: rgba(8,8,22,0.5); border: 1px solid rgba(90,90,150,0.45);
+            border-radius: 6px; z-index: 140; pointer-events: auto;
+            backdrop-filter: blur(2px); overflow: hidden;
+        }
+        #chatWindowList {
+            flex: 1; overflow-y: auto; padding: 4px 6px;
+            font-family: monospace; font-size: 11px; line-height: 1.4;
+            scrollbar-width: thin;
+        }
+        #chatWindowInput {
+            width: 100%; box-sizing: border-box; padding: 5px 8px;
+            font-family: monospace; font-size: 11px;
+            background: rgba(10,10,28,0.85); color: #e8e8f0;
+            border: 0; border-top: 1px solid rgba(90,90,150,0.4); outline: none;
+        }
+        #chatWindowInput:focus { border-top-color: #6080ff; }
+        #chatWindowInput::placeholder { color: #50587a; }
+        #chatSidebar {
+            position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+            width: 20px; height: 84px;
+            display: none; align-items: center; justify-content: center;
+            background: rgba(30,30,50,0.5); border: 1px solid #555; border-left: none;
+            border-radius: 0 5px 5px 0; cursor: pointer; z-index: 140;
+            color: #bbb; font-size: 14px; user-select: none; touch-action: manipulation;
+        }
+        #chatSidebar:active { background: rgba(80,80,120,0.9); color: #fff; }
+
         /* ── Top buttons (symmetric trio) ── */
         #topBtnGroup { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; z-index: 110; }
         .top-btn { position: relative; z-index: 110; pointer-events: auto; background: rgba(30,30,50,0.85); border: 1px solid #555; color: #bbb; width: var(--btn-size); height: var(--btn-size); border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.15s, color 0.15s; }
@@ -52,6 +122,7 @@
         #settingsBtn { font-size: var(--btn-font); }
         #menuBtn     { font-size: calc(var(--btn-font) - 1px); }
         #pauseBtn    { font-size: calc(var(--btn-font) - 2px); }
+        #chatBtn     { font-size: calc(var(--btn-font) - 3px); }
 
         /* ── Pause overlay ── */
         #pauseOverlay { display: none; position: fixed; inset: 0; z-index: 400; background: rgba(0,0,0,0.62); backdrop-filter: blur(6px); align-items: center; justify-content: center; }
@@ -224,12 +295,30 @@
     <div id="effectsBar"></div>
     <div id="toastStack"></div>
 
+    <!-- In-game chat / log (issue #32) -->
+    <div id="gameLogPanel">
+        <div id="gameLogHeader">
+            <span id="gameLogTitle">📜 Game Log</span>
+            <span id="gameLogCount"></span>
+        </div>
+        <div id="gameLogList"></div>
+    </div>
+    <div id="chatBar"><input id="chatInput" type="text" maxlength="240" placeholder="Chat (T) — press Enter to send" autocomplete="off"></div>
+
+    <!-- Floating chat window (desktop: chat button / mobile: sidebar) -->
+    <div id="chatWindow">
+        <div id="chatWindowList"></div>
+        <input id="chatWindowInput" type="text" maxlength="240" placeholder="Chat… (Enter to send)" autocomplete="off">
+    </div>
+    <div id="chatSidebar" title="Chat">💬</div>
+
     <!-- Top buttons -->
     <div id="topBtnGroup">
         <div class="ui-edit-label">Top Buttons</div>
         <button class="top-btn" id="settingsBtn" title="Settings (pauses game)">⚙</button>
         <button class="top-btn" id="menuBtn" title="Menu / Shop (M)">☰</button>
         <button class="top-btn" id="pauseBtn" title="Pause (P)">⏸</button>
+        <button class="top-btn" id="chatBtn" title="Chat">💬</button>
     </div>
 
     <!-- Pause overlay -->
@@ -303,6 +392,10 @@
             <div class="s-section">Button Layout</div>
             <div class="s-row"><label>Customize positions</label><button class="s-btn" id="sEditLayout">Edit Layout</button></div>
             <div class="s-row"><label>UI Scale</label><input type="range" id="sGlobalScale" min="0.5" max="2.0" step="0.05" value="1.0"><span class="s-val" id="sGlobalScaleVal">1.0×</span></div>
+            <div class="s-section">Chat / Log</div>
+            <div class="s-row"><label>Show chat/log</label><select id="sLogVisible"><option value="1">On</option><option value="0">Off</option></select></div>
+            <div class="s-row"><label>Timestamps</label><select id="sLogTime"><option value="1">On</option><option value="0">Off</option></select></div>
+            <div class="s-row"><label>Max messages</label><input type="range" id="sLogMax" min="20" max="200" step="10" value="60"><span class="s-val" id="sLogMaxVal">60</span></div>
             <br>
             <div style="display:flex;gap:10px;justify-content:flex-end">
                 <button class="s-btn" id="sReset">Reset defaults</button>
@@ -336,6 +429,7 @@
 <script src="./pickup-system.js"></script>
 <script src="./fuel-system.js"></script>
 <script src="./pvp-system.js"></script>
+<script src="./game-log.js"></script>
 <script>
 // ── World ──────────────────────────────────────────────────────────────────
 const WORLD_W = 3200, WORLD_H = 2400;
@@ -487,6 +581,7 @@ function onDeviceLayoutChange(){
     const t=DeviceConfig.getType();
     if(t!==_lastDeviceType){_lastDeviceType=t;DeviceConfig.apply();}
     else{DeviceConfig.apply();}
+    if(typeof applyChatDeviceLayout==='function') applyChatDeviceLayout();
 }
 window.addEventListener('resize',onDeviceLayoutChange);
 window.addEventListener('orientationchange',()=>setTimeout(onDeviceLayoutChange,150));
@@ -736,6 +831,99 @@ function showKillFeed(killer, target){
     }
 }
 
+// ── In-game chat / log (issue #32) ─────────────────────────────────────────
+// A shared on-screen log fed by server-authored "game_event" messages
+// (join/leave/death/chat/pickup) plus local single-player events. See
+// game-log.js for the LogBuffer/GameLogUI implementation.
+const LOG_DEFAULTS = { maxMessages: 60, showTimestamps: true, visible: true };
+let logMaxMessages = LOG_DEFAULTS.maxMessages, logShowTimestamps = LOG_DEFAULTS.showTimestamps, logVisible = LOG_DEFAULTS.visible;
+let gameLog = null, chatInputEl = null;
+
+function initGameLog(){
+    gameLog = GameLog.createUI({
+        maxMessages: logMaxMessages,
+        showTimestamps: logShowTimestamps,
+        myId: MY_ID,
+        listEl: [document.getElementById('gameLogList'), document.getElementById('chatWindowList')],
+        countEl: document.getElementById('gameLogCount'),
+    });
+    chatInputEl = document.getElementById('chatInput');
+    chatInputEl.addEventListener('keydown', e => {
+        if(e.key === 'Enter'){
+            const text = chatInputEl.value.trim();
+            if(text){ sendChat(text); }
+            chatInputEl.value = '';
+            e.preventDefault();
+        } else if(e.key === 'Escape'){
+            chatInputEl.blur();
+        }
+    });
+    const chatWinInput = document.getElementById('chatWindowInput');
+    chatWinInput.addEventListener('keydown', e => {
+        if(e.key === 'Enter'){
+            const text = chatWinInput.value.trim();
+            if(text){ sendChat(text); }
+            chatWinInput.value = '';
+            e.preventDefault();
+        } else if(e.key === 'Escape'){
+            toggleChat();
+        }
+    });
+    document.getElementById('gameLogHeader').addEventListener('click', toggleLog);
+    applyLogSettings();
+    applyChatDeviceLayout();
+}
+function sendChat(text){
+    const t = String(text || '').slice(0, 240).trim();
+    if(!t) return;
+    if(ws && ws.readyState === WebSocket.OPEN){
+        // Online: the relay authors the "chat" game_event and echoes it back
+        // to every client (including us), so we don't log it locally.
+        try{ ws.send(JSON.stringify({type:'chat', id:MY_ID, text:t})); }catch(e){}
+    } else {
+        // Offline / single player: echo into the local log only.
+        if(gameLog) gameLog.push({event:'chat', id:MY_ID, name:myName, text:t});
+    }
+}
+function onLocalDeath(){
+    if(!gameLog) return;
+    if(pvpMode && ws && ws.readyState === WebSocket.OPEN) return; // relay logs it
+    gameLog.push({ event:'death', id:MY_ID, name:myName, killer:'' });
+}
+function toggleLog(){
+    logVisible = !logVisible;
+    applyLogSettings();
+}
+function applyLogSettings(){
+    const panel = document.getElementById('gameLogPanel');
+    if(panel) panel.style.display = logVisible ? 'flex' : 'none';
+    if(chatInputEl) chatInputEl.style.display = logVisible ? '' : 'none';
+    if(gameLog){
+        gameLog.setMaxMessages(logMaxMessages);
+        gameLog.setShowTimestamps(logShowTimestamps);
+    }
+}
+let chatOpen = false;
+function toggleChat(){
+    chatOpen = !chatOpen;
+    applyChat();
+}
+function applyChat(){
+    const w = document.getElementById('chatWindow');
+    if(w) w.style.display = chatOpen ? 'flex' : 'none';
+    if(chatOpen){
+        const ci = document.getElementById('chatWindowInput');
+        if(ci) ci.focus();
+    }
+}
+function applyChatDeviceLayout(){
+    const isMobile = DeviceConfig.getType() === 'mobile';
+    const btn = document.getElementById('chatBtn');
+    const side = document.getElementById('chatSidebar');
+    if(btn)  btn.style.display  = isMobile ? 'none' : '';
+    if(side) side.style.display = isMobile ? 'flex' : 'none';
+}
+
 // ── Game state ─────────────────────────────────────────────────────────────
 let player,playerBullets,enemyBullets,entities,powerCubes,score,shootCool;
 const PLAYER_MAX_HP = PvPSystem.PLAYER_MAX_HP;
@@ -756,7 +944,7 @@ function initGame(){
     // In PvP every pilot spawns on a fair, deterministic spawn point; in
     // single player everyone starts from the world centre.
     const spawn = pvpMode ? PvPSystem.spawnPointForId(MY_ID, WORLD_W, WORLD_H) : {x:WORLD_W/2, y:WORLD_H/2};
-    player={x:spawn.x,y:spawn.y,vx:0,vy:0,angle:0,thrust:0,dead:false,hp:PLAYER_MAX_HP,maxHp:PLAYER_MAX_HP};
+    player={x:spawn.x,y:spawn.y,vx:0,vy:0,angle:0,thrust:0,dead:false,hp:PLAYER_MAX_HP,maxHp:PLAYER_MAX_HP,_deathLogged:false};
     player.fuelState = FuelSystem.createFuelState(FUEL_MAX, FUEL_MAX, FUEL_REGEN_RATE, FUEL_IDLE_DELAY);
     // ensure host initializes its hp record for PvP
     if(pvpMode && isHost) playersHP[MY_ID] = PvPSystem.createPlayerHPState();
@@ -820,6 +1008,9 @@ function connectMultiplayer(url){
 }
 function handleNetMessage(msg){
     if(!msg?.type)return;
+    // In-game chat/log (issue #32): server-authored events + late-joiner replay.
+    if(msg.type==='log_history'){ if(gameLog) gameLog.loadHistory(msg.events||[]); return; }
+    if(msg.type==='game_event'){ if(gameLog) gameLog.push(msg); return; }
     if(msg.type==='roster'){(msg.players||[]).forEach(p=>{if(p.id!==MY_ID){allKnownIds.add(p.id);upsertRemote(p.id,p.name,p.state);}});reelectHost();updatePlayerCount();return;}
     if(msg.type==='player_joined'){
         if(msg.id===MY_ID) return;
@@ -912,7 +1103,7 @@ function handleNetMessage(msg){
     if(msg.type==='pickup_exploded'){
         if(msg.pickup)upsertServerPickup(msg.pickup);
         const blastRadius=msg.blastRadius||PickupSystem.FUEL_CELL_BLAST_RADIUS;
-        if(!player.dead&&Math.hypot(wrapDelta(player.x,msg.x,WORLD_W),wrapDelta(player.y,msg.y,WORLD_H))<blastRadius){
+        if(!player.dead&&!hostMenuPause()&&Math.hypot(wrapDelta(player.x,msg.x,WORLD_W),wrapDelta(player.y,msg.y,WORLD_H))<blastRadius){
             if(!hasEffect('shield')){player.dead=true;document.getElementById('restartBtn').style.display='block';}
         }
         return;
@@ -990,7 +1181,10 @@ function sendPickupRequest(pickupId){
     const t=performance.now()/1000;
     if(pickupRequestCooldowns[pickupId]&&t-pickupRequestCooldowns[pickupId]<PICKUP_REQUEST_INTERVAL)return;
     pickupRequestCooldowns[pickupId]=t;
-    ws.send(JSON.stringify({type:'pickup_request',id:MY_ID,pickupId}));
+    // Send the player's current position with the request: the server's copy
+    // of our last_state can lag by a state-send interval plus network
+    // latency, which made legitimate pickups uncollectable on remote clients.
+    ws.send(JSON.stringify({type:'pickup_request',id:MY_ID,pickupId,x:player.x,y:player.y}));
 }
 function sendPickupHit(pickupId,dmg,firedBy){
     if(!ws||ws.readyState!==WebSocket.OPEN)return;
@@ -1066,6 +1260,16 @@ document.getElementById('shootBtn').addEventListener('touchstart',e=>{e.preventD
 document.getElementById('shootBtn').addEventListener('touchend',  e=>{e.preventDefault();touch.shoot=false;});
 document.getElementById('restartBtn').addEventListener('touchstart',()=>{if(player.dead)restart();});
 window.addEventListener('keydown',e=>{
+    if(e.target && e.target.tagName && String(e.target.tagName).toLowerCase()==='input'){
+        // Don't fire game shortcuts while typing in the chat box.
+        if(e.key==='Escape')e.target.blur();
+        return;
+    }
+    if(e.key==='t'||e.key==='T'){
+        if(logVisible && chatInputEl){ chatInputEl.focus(); }
+        e.preventDefault();
+        return;
+    }
     keys[e.key]=true;
     if((e.key==='r'||e.key==='R')&&player.dead)restart();
     if(e.key==='p'||e.key==='P'){
@@ -1221,12 +1425,22 @@ function updateEnemyAI(e,dt){
 }
 
 // ── Update ─────────────────────────────────────────────────────────────────
+// True while the online host has an overlay open (pause/menu/settings). The
+// world keeps simulating so remote clients keep receiving live snapshots, but
+// the host's own ship stays frozen and invulnerable while the overlay is open.
+function hostMenuPause(){ return paused && netState==='connected' && isHost; }
 function update(dt){
+    const hmp = hostMenuPause();
+    // Log local (single-player / offline) deaths once each time the ship dies.
+    if(player.dead && !player._deathLogged){ player._deathLogged = true; onLocalDeath(); }
     tickEffects(dt); tickToasts(dt);
     for(const c of powerCubes||[]){ if(c.hitFlash>0)c.hitFlash=Math.max(0,c.hitFlash-dt); if(c.destroyFlash>0)c.destroyFlash=Math.max(0,c.destroyFlash-dt); }
     // tick ram cooldown timers
     for(const k of Object.keys(ramCooldowns)){ ramCooldowns[k]-=dt; if(ramCooldowns[k]<=0)delete ramCooldowns[k]; }
 
+    // While the online host's overlay is open the ship is frozen: no turning,
+    // thrusting, shooting, lasers, or movement.
+    if(!hmp){
     // — Turn —
     if(turnMode==='mouse'){
         const ta=Math.atan2(mouseY-canvas.height/2,mouseX-canvas.width/2);
@@ -1302,6 +1516,7 @@ function update(dt){
         player.vx*=0.995; player.vy*=0.995;
         player.x+=player.vx*dt; player.y+=player.vy*dt;
         wrapPos(player); resolveObstacles(player,10);
+    }
     }
 
     // — Player bullets (homing) —
@@ -1448,7 +1663,7 @@ function update(dt){
             const keyp = `${a.gen}:player`;
             if(d < a.r + 8 && !entityRamCooldowns[keyp]){
                 // only aggressive tanks ram players
-                if(a.alerted || (a.lockedTarget && a.lockedTarget.type==='player')){
+                if(!hmp && (a.alerted || (a.lockedTarget && a.lockedTarget.type==='player'))){
                     entityRamCooldowns[keyp]=ENTITY_RAM_COOLDOWN;
                     // apply damage to player (host authoritative, PvP only)
                     if(pvpMode){
@@ -1483,7 +1698,7 @@ function update(dt){
     }
 
     // — Player vs power cubes —
-    if(!player.dead){
+    if(!player.dead && !hmp){
         for(const c of powerCubes){
             if(!c.active && !c.fuseActive)continue;
             if(Math.hypot(player.x-c.x,player.y-c.y)<c.r+10){
@@ -1510,7 +1725,7 @@ function update(dt){
 
     // — Player collisions —
     const CRASH_SPEED = 140;
-    if(!player.dead){
+    if(!player.dead && !hmp){
         for(const e of entities){
             const dx = wrapDelta(player.x,e.x,WORLD_W), dy = wrapDelta(player.y,e.y,WORLD_H);
             const d = Math.hypot(dx,dy);
@@ -1594,7 +1809,7 @@ function update(dt){
             }
         }
     }
-    if(!player.dead){
+    if(!player.dead && !hmp){
         for(const b of enemyBullets){
             if(Math.hypot(player.x-b.x,player.y-b.y)<10){
                 if(hasEffect('shield')){
@@ -2009,6 +2224,10 @@ function openSettings(){
     document.getElementById('sZoom').value=zoomLevel;   document.getElementById('sZoomVal').textContent=zoomLevel.toFixed(2)+'×';
     document.getElementById('sFps').value=fpsCap;       document.getElementById('sFpsVal').textContent=fpsCap;
     document.getElementById('sFpsUnlimit').value=unlimitFps?'1':'0';
+    document.getElementById('sLogVisible').value=logVisible?'1':'0';
+    document.getElementById('sLogTime').value=logShowTimestamps?'1':'0';
+    document.getElementById('sLogMax').value=logMaxMessages;
+    document.getElementById('sLogMaxVal').textContent=logMaxMessages;
     document.getElementById('settingsOverlay').classList.add('open');
 }
 function closeSettings(){
@@ -2021,14 +2240,18 @@ function applySettings(){
     zoomLevel  =parseFloat(document.getElementById('sZoom').value);
     fpsCap     =parseInt(document.getElementById('sFps').value,10);
     unlimitFps =document.getElementById('sFpsUnlimit').value==='1';
-    recalcView(); closeSettings();
+    logVisible         =document.getElementById('sLogVisible').value==='1';
+    logShowTimestamps  =document.getElementById('sLogTime').value==='1';
+    logMaxMessages     =parseInt(document.getElementById('sLogMax').value,10);
+    recalcView(); applyLogSettings(); closeSettings();
 }
-function resetDefaults(){turnMode=DEFAULTS.turnMode;sensitivity=DEFAULTS.sensitivity;zoomLevel=DEFAULTS.zoom;fpsCap=DEFAULTS.fpsCap;unlimitFps=DEFAULTS.unlimitFps;recalcView();openSettings();}
+function resetDefaults(){turnMode=DEFAULTS.turnMode;sensitivity=DEFAULTS.sensitivity;zoomLevel=DEFAULTS.zoom;fpsCap=DEFAULTS.fpsCap;unlimitFps=DEFAULTS.unlimitFps;logVisible=LOG_DEFAULTS.visible;logShowTimestamps=LOG_DEFAULTS.showTimestamps;logMaxMessages=LOG_DEFAULTS.maxMessages;applyLogSettings();recalcView();openSettings();}
 
 const sliderSync=(id,vid,fmt)=>{const e=document.getElementById(id),v=document.getElementById(vid);e.addEventListener('input',()=>v.textContent=fmt(e.value));};
 sliderSync('sSens','sSensVal',v=>parseFloat(v).toFixed(1));
 sliderSync('sZoom','sZoomVal',v=>parseFloat(v).toFixed(2)+'×');
 sliderSync('sFps','sFpsVal',v=>v);
+sliderSync('sLogMax','sLogMaxVal',v=>v);
 
 // ── Event listeners ────────────────────────────────────────────────────────
 document.getElementById('settingsBtn').addEventListener('click', openSettings);
@@ -2044,6 +2267,8 @@ document.getElementById('mNameApply').addEventListener('click',()=>{const n=docu
 document.getElementById('mPvp').addEventListener('change',e=>{if(e.target.checked!==pvpMode)setPvpMode(e.target.checked);});
 
 document.getElementById('pauseBtn').addEventListener('click',togglePause);
+document.getElementById('chatBtn').addEventListener('click',toggleChat);
+document.getElementById('chatSidebar').addEventListener('click',toggleChat);
 document.getElementById('pmResume').addEventListener('click',closePause);
 document.getElementById('pmMenu').addEventListener('click',()=>{closePause();openMenu();});
 document.getElementById('pmSettings').addEventListener('click',()=>{
@@ -2053,6 +2278,10 @@ document.getElementById('pmSettings').addEventListener('click',()=>{
     document.getElementById('sZoom').value=zoomLevel;   document.getElementById('sZoomVal').textContent=zoomLevel.toFixed(2)+'×';
     document.getElementById('sFps').value=fpsCap;       document.getElementById('sFpsVal').textContent=fpsCap;
     document.getElementById('sFpsUnlimit').value=unlimitFps?'1':'0';
+    document.getElementById('sLogVisible').value=logVisible?'1':'0';
+    document.getElementById('sLogTime').value=logShowTimestamps?'1':'0';
+    document.getElementById('sLogMax').value=logMaxMessages;
+    document.getElementById('sLogMaxVal').textContent=logMaxMessages;
     document.getElementById('settingsOverlay').classList.add('open');
 });
 document.getElementById('pmRestart').addEventListener('click',()=>{closePause();restart();});
@@ -2282,7 +2511,11 @@ function frameTick(){
     last=now;
     if(window.__fatal){renderFatal();return;}
     try{
-        if(!paused){const dt=Math.min(delta/1000,0.05);update(dt);}
+        // While the online host has the pause/menu/settings overlay open, keep
+        // simulating so remote clients keep receiving live state/enemy
+        // snapshots — otherwise their screens freeze. The host's own ship is
+        // frozen + invulnerable via `hostMenuPause()` inside update().
+        if(!paused || (netState==='connected' && isHost)){const dt=Math.min(delta/1000,0.05);update(dt);}
         draw();
     }catch(e){if(!window.__fatal)window.__fatal=(e&&(e.stack||e.message))||String(e);}
 }
@@ -2317,6 +2550,7 @@ document.addEventListener('visibilitychange',()=>{
         try{ws.send(JSON.stringify({type:'state',id:MY_ID,name:myName,x:player.x,y:player.y,angle:player.angle,vx:player.vx,vy:player.vy,dead:player.dead,fuel:player.fuelState.fuel,maxFuel:player.fuelState.maxFuel,hp:player.hp,maxHp:player.maxHp}));}catch(e){}
     }
 });
+initGameLog();
 initGame();
 loop();
 </script>

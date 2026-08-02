@@ -27,6 +27,20 @@ net_log = get_logger("Network")
 WIDTH, HEIGHT = 800, 600
 FPS = 60
 
+# In-game chat/log (issue #32): the desktop client shows a small on-screen
+# log of deaths (who died / who killed whom). Remote players are identified
+# by their short connection id because the UDP relay has no name exchange.
+LOG_COLOR_SELF = (255, 120, 120)
+LOG_COLOR_DEATH = (255, 190, 150)
+LOG_COLOR_JOIN = (127, 220, 143)
+LOG_LIFETIME = 12.0
+LOG_MAX_ENTRIES = 40
+LOG_MAX_RENDER = 6
+
+
+def _short_id(cid):
+    return str(cid or '?')[:8]
+
 
 class Player:
     def __init__(self, x, y):
@@ -144,6 +158,25 @@ class NetworkClient:
         self.pvp_mode = False
         self.players_hp = {}     # host-authoritative {id: {hp,maxHp,dead}}
         self.ram_cooldowns = {}  # {remoteId: timeLeft} to avoid repeated ram damage
+        # ── In-game chat/log (issue #32) ──────────────────────────────────
+        self.game_log = []       # newest first: [{text, color, t}]
+        self.log_lock = threading.Lock()
+        self.last_death_killer = ''  # set by the PvP handlers so the main
+                                     # loop can log "you were killed by X"
+
+    def add_log(self, text, color):
+        """Add an in-game log entry (safe to call from any thread)."""
+        with self.log_lock:
+            self.game_log.insert(0, {'text': text, 'color': color, 't': LOG_LIFETIME})
+            if len(self.game_log) > LOG_MAX_ENTRIES:
+                del self.game_log[LOG_MAX_ENTRIES:]
+
+    def tick_log(self, dt):
+        """Age/remove expired log entries."""
+        with self.log_lock:
+            for e in self.game_log:
+                e['t'] -= dt
+            self.game_log = [e for e in self.game_log if e['t'] > 0]
 
     def _listen(self):
         while self.running:
@@ -162,6 +195,7 @@ class NetworkClient:
                 continue
             mtype = msg.get('type')
             if mtype == 'state':
+                first_sight = sender not in self.others
                 with self.lock:
                     info = self.others.get(sender, {})
                     info['x'] = msg.get('x', 0)
@@ -176,6 +210,8 @@ class NetworkClient:
                 # Host election: lowest ID wins
                 all_ids = [self.id] + list(self.others.keys())
                 self.is_host = (min(all_ids) == self.id)
+                if first_sight:
+                    self.add_log(f"{_short_id(sender)} joined", LOG_COLOR_JOIN)
             elif mtype == 'shoot':
                 bx = msg.get('x')
                 by = msg.get('y')
@@ -220,6 +256,7 @@ class NetworkClient:
                         self.player.hp = hp
                         self.player.dead = dead
                     if dead:
+                        self.last_death_killer = killer or ''
                         log.warning(f"You were killed by {killer or 'unknown'}")
                 else:
                     with self.lock:
@@ -232,6 +269,10 @@ class NetworkClient:
                     self.players_hp[pid]['dead'] = dead
                 if dead and pid != self.id:
                     log.warning(f"{killer or 'unknown'} killed {pid}")
+                    self.add_log(
+                        f"{_short_id(killer) or 'someone'} destroyed {_short_id(pid)}",
+                        LOG_COLOR_DEATH,
+                    )
             elif mtype == 'player_respawn':
                 # A player restarted; the host resets its HP record and
                 # broadcasts the fresh (alive) state to everyone.
@@ -266,6 +307,13 @@ class NetworkClient:
         self.send_player_hp(target, hp, dead, killer or '')
         if res['lethal']:
             log.warning(f"{killer or 'unknown'} killed {target}")
+            if target == self.id:
+                self.last_death_killer = killer or ''
+            else:
+                self.add_log(
+                    f"{_short_id(killer) or 'someone'} destroyed {_short_id(target)}",
+                    LOG_COLOR_DEATH,
+                )
 
     def report_hit(self, target, dmg, attacker):
         """Report a PvP hit: apply locally if host, else send to the host."""
@@ -335,10 +383,31 @@ class NetworkClient:
     def close(self):
         self.running = False
         try:
+            self.sock.close()  # unblock a recvfrom stuck in the listen thread
+        except Exception:
+            pass
+        try:
             self.listen_thread.join(timeout=0.5)
             self.send_thread.join(timeout=0.5)
         except Exception:
             pass
+
+
+def draw_game_log(screen, log_font, entries):
+    """Render the in-game death log (issue #32) in the bottom-left corner."""
+    if not entries:
+        return
+    line_h = 19
+    n = min(len(entries), LOG_MAX_RENDER)
+    box_w = min(360, WIDTH - 16)
+    box_h = n * line_h + 8
+    box = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
+    box.fill((8, 8, 22, 180))
+    screen.blit(box, (8, HEIGHT - 8 - box_h))
+    for i in range(n):
+        ent = entries[i]
+        surf = log_font.render(ent['text'], True, ent['color'])
+        screen.blit(surf, (14, HEIGHT - 8 - box_h + 6 + i * line_h))
 
 
 def main(server_host=None, server_port=50000):
@@ -366,6 +435,7 @@ def main(server_host=None, server_port=50000):
             net_log.error(f"Network disabled: {e}")
 
     font = pygame.font.SysFont(None, 24)
+    log_font = pygame.font.SysFont(None, 20)
 
     prev_dead = player.dead
     prev_score = score
@@ -480,7 +550,19 @@ def main(server_host=None, server_port=50000):
 
         if player.dead and not prev_dead:
             log.warning("Player died!")
+            # In-game log (issue #32): the PvP handlers record the killer via
+            # last_death_killer; everything else is a plain "you died".
+            if netclient:
+                killer = netclient.last_death_killer or ''
+                netclient.last_death_killer = ''
+                netclient.add_log(
+                    f"You were destroyed by {_short_id(killer)}" if killer else "You died",
+                    LOG_COLOR_SELF,
+                )
         prev_dead = player.dead
+
+        if netclient:
+            netclient.tick_log(dt)
 
         if score != prev_score:
             log.info(f"Score: {score}")
@@ -532,6 +614,10 @@ def main(server_host=None, server_port=50000):
             if netclient.pvp_mode:
                 hud3 = font.render(f"HP: {max(0, player.hp)}/{player.max_hp}", True, (230, 170, 170))
                 screen.blit(hud3, (8, 52))
+            # In-game death log (issue #32)
+            with netclient.log_lock:
+                log_entries = list(netclient.game_log)
+            draw_game_log(screen, log_font, log_entries)
 
         pygame.display.flip()
 
