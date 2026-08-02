@@ -45,75 +45,35 @@
         #toastStack { position: absolute; top: 60px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; z-index: 300; pointer-events: none; }
         .toast { padding: 7px 18px; border-radius: 6px; font-family: monospace; font-size: var(--toast-font); font-weight: bold; border: 1px solid rgba(255,255,255,0.3); background: rgba(10,10,30,0.85); text-align: center; white-space: nowrap; }
 
-        /* ── In-game chat / log (issue #32) ── */
-        #gameLogPanel {
-            position: absolute; left: 50%; bottom: 178px; transform: translateX(-50%);
-            width: min(520px, 82vw); height: 26vh; min-height: 90px; max-height: 38vh;
-            display: flex; flex-direction: column;
-            background: rgba(8,8,22,0.72); border: 1px solid rgba(90,90,150,0.4);
-            border-radius: 6px; z-index: 130; pointer-events: auto;
-            backdrop-filter: blur(3px); overflow: hidden;
+        /* ── Inline chat / log (issue #37) ──
+           Chat messages are part of the gameplay: no box, no header. The
+           overlay fades out after a configurable period of inactivity and
+           reappears whenever new activity occurs. Readability over any
+           map/background comes from the text shadow, not a solid box. */
+        #inlineChat {
+            position: absolute; left: 12px; bottom: 16px;
+            width: min(430px, 68vw);
+            display: flex; flex-direction: column; gap: 3px;
+            z-index: 130; pointer-events: none;
+            opacity: 0;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.9), 0 0 2px rgba(0,0,0,0.8);
         }
-        #gameLogHeader {
-            display: flex; align-items: center; gap: 8px; padding: 3px 10px;
-            font-family: monospace; font-size: 11px; color: #6070a0;
-            border-bottom: 1px solid rgba(90,90,150,0.25); cursor: pointer; user-select: none;
-            background: rgba(20,20,45,0.5);
+        #inlineChatList {
+            display: flex; flex-direction: column; gap: 2px;
+            font-family: monospace; font-size: 12px; line-height: 1.45;
         }
-        #gameLogTitle { letter-spacing: 1px; text-transform: uppercase; flex: 1; }
-        #gameLogCount { color: #5060a0; }
-        #gameLogList {
-            flex: 1; overflow-y: auto; padding: 4px 6px;
-            font-family: monospace; font-size: 12px; line-height: 1.5;
-            scrollbar-width: thin;
-        }
-        .gl-row { display: flex; align-items: baseline; gap: 6px; border-left: 3px solid transparent; padding-left: 6px; }
-        .gl-time { color: #5060a0; font-size: 10px; flex-shrink: 0; }
+        .gl-row { display: flex; align-items: baseline; gap: 6px; }
+        .gl-time { color: #9aa2c8; font-size: 10px; flex-shrink: 0; }
         .gl-icon { flex-shrink: 0; }
-        .gl-text { color: #d8d8e8; word-break: break-word; }
-        #chatBar {
-            position: absolute; left: 50%; bottom: 138px; transform: translateX(-50%);
-            width: min(520px, 82vw); z-index: 131; pointer-events: auto;
-        }
+        .gl-text { color: #eef0ff; word-break: break-word; }
         #chatInput {
-            width: 100%; padding: 6px 10px; font-family: monospace; font-size: 13px;
-            background: rgba(10,10,28,0.85); color: #e8e8f0;
+            pointer-events: auto; margin-top: 3px; width: 100%; box-sizing: border-box;
+            padding: 6px 10px; font-family: monospace; font-size: 13px;
+            background: rgba(10,10,28,0.75); color: #e8e8f0;
             border: 1px solid rgba(90,90,150,0.5); border-radius: 5px; outline: none;
         }
         #chatInput:focus { border-color: #6080ff; }
-        #chatInput::placeholder { color: #50587a; }
-
-        /* ── Floating chat window + mobile sidebar ── */
-        #chatWindow {
-            position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
-            width: min(170px, 36vw); height: min(205px, 36vh); min-height: 120px;
-            display: none; flex-direction: column;
-            background: rgba(8,8,22,0.5); border: 1px solid rgba(90,90,150,0.45);
-            border-radius: 6px; z-index: 140; pointer-events: auto;
-            backdrop-filter: blur(2px); overflow: hidden;
-        }
-        #chatWindowList {
-            flex: 1; overflow-y: auto; padding: 4px 6px;
-            font-family: monospace; font-size: 11px; line-height: 1.4;
-            scrollbar-width: thin;
-        }
-        #chatWindowInput {
-            width: 100%; box-sizing: border-box; padding: 5px 8px;
-            font-family: monospace; font-size: 11px;
-            background: rgba(10,10,28,0.85); color: #e8e8f0;
-            border: 0; border-top: 1px solid rgba(90,90,150,0.4); outline: none;
-        }
-        #chatWindowInput:focus { border-top-color: #6080ff; }
-        #chatWindowInput::placeholder { color: #50587a; }
-        #chatSidebar {
-            position: absolute; left: 0; top: 50%; transform: translateY(-50%);
-            width: 20px; height: 84px;
-            display: none; align-items: center; justify-content: center;
-            background: rgba(30,30,50,0.5); border: 1px solid #555; border-left: none;
-            border-radius: 0 5px 5px 0; cursor: pointer; z-index: 140;
-            color: #bbb; font-size: 14px; user-select: none; touch-action: manipulation;
-        }
-        #chatSidebar:active { background: rgba(80,80,120,0.9); color: #fff; }
+        #chatInput::placeholder { color: #8a92b8; }
 
         /* ── Top buttons (symmetric trio) ── */
         #topBtnGroup { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; z-index: 110; }
@@ -122,7 +82,6 @@
         #settingsBtn { font-size: var(--btn-font); }
         #menuBtn     { font-size: calc(var(--btn-font) - 1px); }
         #pauseBtn    { font-size: calc(var(--btn-font) - 2px); }
-        #chatBtn     { font-size: calc(var(--btn-font) - 3px); }
 
         /* ── Pause overlay ── */
         #pauseOverlay { display: none; position: fixed; inset: 0; z-index: 400; background: rgba(0,0,0,0.62); backdrop-filter: blur(6px); align-items: center; justify-content: center; }
@@ -295,22 +254,12 @@
     <div id="effectsBar"></div>
     <div id="toastStack"></div>
 
-    <!-- In-game chat / log (issue #32) -->
-    <div id="gameLogPanel">
-        <div id="gameLogHeader">
-            <span id="gameLogTitle">📜 Game Log</span>
-            <span id="gameLogCount"></span>
-        </div>
-        <div id="gameLogList"></div>
+    <!-- Inline chat / log (issue #37): messages and input live inside the
+         game view as an inline overlay that fades out when inactive. -->
+    <div id="inlineChat">
+        <div id="inlineChatList"></div>
+        <input id="chatInput" type="text" maxlength="240" placeholder="Chat (T) — press Enter to send" autocomplete="off">
     </div>
-    <div id="chatBar"><input id="chatInput" type="text" maxlength="240" placeholder="Chat (T) — press Enter to send" autocomplete="off"></div>
-
-    <!-- Floating chat window (desktop: chat button / mobile: sidebar) -->
-    <div id="chatWindow">
-        <div id="chatWindowList"></div>
-        <input id="chatWindowInput" type="text" maxlength="240" placeholder="Chat… (Enter to send)" autocomplete="off">
-    </div>
-    <div id="chatSidebar" title="Chat">💬</div>
 
     <!-- Top buttons -->
     <div id="topBtnGroup">
@@ -318,7 +267,6 @@
         <button class="top-btn" id="settingsBtn" title="Settings (pauses game)">⚙</button>
         <button class="top-btn" id="menuBtn" title="Menu / Shop (M)">☰</button>
         <button class="top-btn" id="pauseBtn" title="Pause (P)">⏸</button>
-        <button class="top-btn" id="chatBtn" title="Chat">💬</button>
     </div>
 
     <!-- Pause overlay -->
@@ -393,7 +341,9 @@
             <div class="s-row"><label>Customize positions</label><button class="s-btn" id="sEditLayout">Edit Layout</button></div>
             <div class="s-row"><label>UI Scale</label><input type="range" id="sGlobalScale" min="0.5" max="2.0" step="0.05" value="1.0"><span class="s-val" id="sGlobalScaleVal">1.0×</span></div>
             <div class="s-section">Chat / Log</div>
-            <div class="s-row"><label>Show chat/log</label><select id="sLogVisible"><option value="1">On</option><option value="0">Off</option></select></div>
+            <div class="s-row"><label>Auto-hide chat</label><select id="sLogAutoHide"><option value="1">On</option><option value="0">Off (always visible)</option></select></div>
+            <div class="s-row"><label>Hide after</label><input type="range" id="sLogTimeout" min="2" max="30" step="1" value="6"><span class="s-val" id="sLogTimeoutVal">6s</span></div>
+            <div class="s-row"><label>Fade duration</label><input type="range" id="sLogFade" min="0.1" max="2" step="0.1" value="0.4"><span class="s-val" id="sLogFadeVal">0.4s</span></div>
             <div class="s-row"><label>Timestamps</label><select id="sLogTime"><option value="1">On</option><option value="0">Off</option></select></div>
             <div class="s-row"><label>Max messages</label><input type="range" id="sLogMax" min="20" max="200" step="10" value="60"><span class="s-val" id="sLogMaxVal">60</span></div>
             <br>
@@ -581,7 +531,6 @@ function onDeviceLayoutChange(){
     const t=DeviceConfig.getType();
     if(t!==_lastDeviceType){_lastDeviceType=t;DeviceConfig.apply();}
     else{DeviceConfig.apply();}
-    if(typeof applyChatDeviceLayout==='function') applyChatDeviceLayout();
 }
 window.addEventListener('resize',onDeviceLayoutChange);
 window.addEventListener('orientationchange',()=>setTimeout(onDeviceLayoutChange,150));
@@ -831,23 +780,32 @@ function showKillFeed(killer, target){
     }
 }
 
-// ── In-game chat / log (issue #32) ─────────────────────────────────────────
-// A shared on-screen log fed by server-authored "game_event" messages
-// (join/leave/death/chat/pickup) plus local single-player events. See
-// game-log.js for the LogBuffer/GameLogUI implementation.
-const LOG_DEFAULTS = { maxMessages: 60, showTimestamps: true, visible: true };
-let logMaxMessages = LOG_DEFAULTS.maxMessages, logShowTimestamps = LOG_DEFAULTS.showTimestamps, logVisible = LOG_DEFAULTS.visible;
+// ── Inline chat / log (issue #37) ─────────────────────────────────────────
+// A unified on-screen log fed by server-authored "game_event" messages
+// (join/leave/death/chat/pickup) plus local single-player events. The chat
+// is rendered inline in the game view and auto-fades after a configurable
+// period of inactivity, reappearing whenever new activity occurs. See
+// game-log.js for the LogBuffer / GameLogUI / InlineChatUI implementation.
+const LOG_DEFAULTS = { maxMessages: 60, showTimestamps: true, autoHide: true, inactivityTimeout: 6000, fadeMs: 400 };
+let logMaxMessages = LOG_DEFAULTS.maxMessages, logShowTimestamps = LOG_DEFAULTS.showTimestamps,
+    logAutoHide = LOG_DEFAULTS.autoHide, logInactivityTimeout = LOG_DEFAULTS.inactivityTimeout,
+    logFadeMs = LOG_DEFAULTS.fadeMs;
 let gameLog = null, chatInputEl = null;
 
 function initGameLog(){
-    gameLog = GameLog.createUI({
+    chatInputEl = document.getElementById('chatInput');
+    gameLog = GameLog.createInlineUI({
         maxMessages: logMaxMessages,
         showTimestamps: logShowTimestamps,
         myId: MY_ID,
-        listEl: [document.getElementById('gameLogList'), document.getElementById('chatWindowList')],
-        countEl: document.getElementById('gameLogCount'),
+        autoHide: logAutoHide,
+        inactivityTimeout: logInactivityTimeout,
+        fadeInMs: logFadeMs,
+        fadeOutMs: logFadeMs,
+        rootEl: document.getElementById('inlineChat'),
+        listEl: document.getElementById('inlineChatList'),
+        inputEl: chatInputEl,
     });
-    chatInputEl = document.getElementById('chatInput');
     chatInputEl.addEventListener('keydown', e => {
         if(e.key === 'Enter'){
             const text = chatInputEl.value.trim();
@@ -858,20 +816,7 @@ function initGameLog(){
             chatInputEl.blur();
         }
     });
-    const chatWinInput = document.getElementById('chatWindowInput');
-    chatWinInput.addEventListener('keydown', e => {
-        if(e.key === 'Enter'){
-            const text = chatWinInput.value.trim();
-            if(text){ sendChat(text); }
-            chatWinInput.value = '';
-            e.preventDefault();
-        } else if(e.key === 'Escape'){
-            toggleChat();
-        }
-    });
-    document.getElementById('gameLogHeader').addEventListener('click', toggleLog);
     applyLogSettings();
-    applyChatDeviceLayout();
 }
 function sendChat(text){
     const t = String(text || '').slice(0, 240).trim();
@@ -890,38 +835,13 @@ function onLocalDeath(){
     if(pvpMode && ws && ws.readyState === WebSocket.OPEN) return; // relay logs it
     gameLog.push({ event:'death', id:MY_ID, name:myName, killer:'' });
 }
-function toggleLog(){
-    logVisible = !logVisible;
-    applyLogSettings();
-}
 function applyLogSettings(){
-    const panel = document.getElementById('gameLogPanel');
-    if(panel) panel.style.display = logVisible ? 'flex' : 'none';
-    if(chatInputEl) chatInputEl.style.display = logVisible ? '' : 'none';
-    if(gameLog){
-        gameLog.setMaxMessages(logMaxMessages);
-        gameLog.setShowTimestamps(logShowTimestamps);
-    }
-}
-let chatOpen = false;
-function toggleChat(){
-    chatOpen = !chatOpen;
-    applyChat();
-}
-function applyChat(){
-    const w = document.getElementById('chatWindow');
-    if(w) w.style.display = chatOpen ? 'flex' : 'none';
-    if(chatOpen){
-        const ci = document.getElementById('chatWindowInput');
-        if(ci) ci.focus();
-    }
-}
-function applyChatDeviceLayout(){
-    const isMobile = DeviceConfig.getType() === 'mobile';
-    const btn = document.getElementById('chatBtn');
-    const side = document.getElementById('chatSidebar');
-    if(btn)  btn.style.display  = isMobile ? 'none' : '';
-    if(side) side.style.display = isMobile ? 'flex' : 'none';
+    if(!gameLog) return;
+    gameLog.setMaxMessages(logMaxMessages);
+    gameLog.setShowTimestamps(logShowTimestamps);
+    gameLog.setAutoHide(logAutoHide);
+    gameLog.setInactivityTimeout(logInactivityTimeout);
+    gameLog.setFadeDurations(logFadeMs, logFadeMs);
 }
 
 // ── Game state ─────────────────────────────────────────────────────────────
@@ -1266,7 +1186,7 @@ window.addEventListener('keydown',e=>{
         return;
     }
     if(e.key==='t'||e.key==='T'){
-        if(logVisible && chatInputEl){ chatInputEl.focus(); }
+        if(chatInputEl){ chatInputEl.focus(); }
         e.preventDefault();
         return;
     }
@@ -2224,7 +2144,11 @@ function openSettings(){
     document.getElementById('sZoom').value=zoomLevel;   document.getElementById('sZoomVal').textContent=zoomLevel.toFixed(2)+'×';
     document.getElementById('sFps').value=fpsCap;       document.getElementById('sFpsVal').textContent=fpsCap;
     document.getElementById('sFpsUnlimit').value=unlimitFps?'1':'0';
-    document.getElementById('sLogVisible').value=logVisible?'1':'0';
+    document.getElementById('sLogAutoHide').value=logAutoHide?'1':'0';
+    document.getElementById('sLogTimeout').value=Math.round(logInactivityTimeout/1000);
+    document.getElementById('sLogTimeoutVal').textContent=Math.round(logInactivityTimeout/1000)+'s';
+    document.getElementById('sLogFade').value=(logFadeMs/1000).toFixed(1);
+    document.getElementById('sLogFadeVal').textContent=(logFadeMs/1000).toFixed(1)+'s';
     document.getElementById('sLogTime').value=logShowTimestamps?'1':'0';
     document.getElementById('sLogMax').value=logMaxMessages;
     document.getElementById('sLogMaxVal').textContent=logMaxMessages;
@@ -2240,17 +2164,21 @@ function applySettings(){
     zoomLevel  =parseFloat(document.getElementById('sZoom').value);
     fpsCap     =parseInt(document.getElementById('sFps').value,10);
     unlimitFps =document.getElementById('sFpsUnlimit').value==='1';
-    logVisible         =document.getElementById('sLogVisible').value==='1';
-    logShowTimestamps  =document.getElementById('sLogTime').value==='1';
-    logMaxMessages     =parseInt(document.getElementById('sLogMax').value,10);
+    logAutoHide          =document.getElementById('sLogAutoHide').value==='1';
+    logInactivityTimeout =parseInt(document.getElementById('sLogTimeout').value,10)*1000;
+    logFadeMs            =Math.round(parseFloat(document.getElementById('sLogFade').value)*1000);
+    logShowTimestamps    =document.getElementById('sLogTime').value==='1';
+    logMaxMessages       =parseInt(document.getElementById('sLogMax').value,10);
     recalcView(); applyLogSettings(); closeSettings();
 }
-function resetDefaults(){turnMode=DEFAULTS.turnMode;sensitivity=DEFAULTS.sensitivity;zoomLevel=DEFAULTS.zoom;fpsCap=DEFAULTS.fpsCap;unlimitFps=DEFAULTS.unlimitFps;logVisible=LOG_DEFAULTS.visible;logShowTimestamps=LOG_DEFAULTS.showTimestamps;logMaxMessages=LOG_DEFAULTS.maxMessages;applyLogSettings();recalcView();openSettings();}
+function resetDefaults(){turnMode=DEFAULTS.turnMode;sensitivity=DEFAULTS.sensitivity;zoomLevel=DEFAULTS.zoom;fpsCap=DEFAULTS.fpsCap;unlimitFps=DEFAULTS.unlimitFps;logAutoHide=LOG_DEFAULTS.autoHide;logInactivityTimeout=LOG_DEFAULTS.inactivityTimeout;logFadeMs=LOG_DEFAULTS.fadeMs;logShowTimestamps=LOG_DEFAULTS.showTimestamps;logMaxMessages=LOG_DEFAULTS.maxMessages;applyLogSettings();recalcView();openSettings();}
 
 const sliderSync=(id,vid,fmt)=>{const e=document.getElementById(id),v=document.getElementById(vid);e.addEventListener('input',()=>v.textContent=fmt(e.value));};
 sliderSync('sSens','sSensVal',v=>parseFloat(v).toFixed(1));
 sliderSync('sZoom','sZoomVal',v=>parseFloat(v).toFixed(2)+'×');
 sliderSync('sFps','sFpsVal',v=>v);
+sliderSync('sLogTimeout','sLogTimeoutVal',v=>v+'s');
+sliderSync('sLogFade','sLogFadeVal',v=>parseFloat(v).toFixed(1)+'s');
 sliderSync('sLogMax','sLogMaxVal',v=>v);
 
 // ── Event listeners ────────────────────────────────────────────────────────
@@ -2267,8 +2195,6 @@ document.getElementById('mNameApply').addEventListener('click',()=>{const n=docu
 document.getElementById('mPvp').addEventListener('change',e=>{if(e.target.checked!==pvpMode)setPvpMode(e.target.checked);});
 
 document.getElementById('pauseBtn').addEventListener('click',togglePause);
-document.getElementById('chatBtn').addEventListener('click',toggleChat);
-document.getElementById('chatSidebar').addEventListener('click',toggleChat);
 document.getElementById('pmResume').addEventListener('click',closePause);
 document.getElementById('pmMenu').addEventListener('click',()=>{closePause();openMenu();});
 document.getElementById('pmSettings').addEventListener('click',()=>{
@@ -2278,7 +2204,11 @@ document.getElementById('pmSettings').addEventListener('click',()=>{
     document.getElementById('sZoom').value=zoomLevel;   document.getElementById('sZoomVal').textContent=zoomLevel.toFixed(2)+'×';
     document.getElementById('sFps').value=fpsCap;       document.getElementById('sFpsVal').textContent=fpsCap;
     document.getElementById('sFpsUnlimit').value=unlimitFps?'1':'0';
-    document.getElementById('sLogVisible').value=logVisible?'1':'0';
+    document.getElementById('sLogAutoHide').value=logAutoHide?'1':'0';
+    document.getElementById('sLogTimeout').value=Math.round(logInactivityTimeout/1000);
+    document.getElementById('sLogTimeoutVal').textContent=Math.round(logInactivityTimeout/1000)+'s';
+    document.getElementById('sLogFade').value=(logFadeMs/1000).toFixed(1);
+    document.getElementById('sLogFadeVal').textContent=(logFadeMs/1000).toFixed(1)+'s';
     document.getElementById('sLogTime').value=logShowTimestamps?'1':'0';
     document.getElementById('sLogMax').value=logMaxMessages;
     document.getElementById('sLogMaxVal').textContent=logMaxMessages;

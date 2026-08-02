@@ -356,8 +356,8 @@ from the same URL.
 
 ## In-game chat / log
 
-Every version of the game now shows an in-game chat/log panel that tells
-you what's happening beyond your own ship:
+Every version of the game shows an in-game chat/log overlay that tells you
+what's happening beyond your own ship:
 
 - **Deaths & kills** — "`A` was destroyed by `B`", plus "`You` were
   destroyed by `X`" on your own ship.
@@ -374,16 +374,35 @@ after ~12 seconds; the buffer holds up to 40 entries.
 
 ### Web versions (`xpilot-web.html`, `xpilot-pyodide.html`)
 
-A collapsible log panel sits bottom-left above a chat bar:
+Chat is rendered **inline** as part of the gameplay — there is no chat box
+or header. Messages appear in the bottom-left of the game view with a text
+shadow so they stay readable over any map or background.
 
 - **`T`** — focus the chat input.
 - **Type + `Enter`** — send a message to every player.
 - **`Esc`** — blur the chat input and resume flying.
-- Click the **log header** to show/hide the panel.
+
+#### Auto-hiding
+
+To keep the screen clean, the inline chat **fades out after a short period
+of inactivity** and fades right back in whenever something happens:
+
+- A player sends a chat message.
+- A system notification is received.
+- A player joins or leaves.
+- A player dies or another important event occurs.
+- You focus the chat input (it stays up while you type).
+
+Fade-in and fade-out are smooth CSS opacity transitions.
 
 The **Settings** menu (gear icon) has a **Chat / Log** section:
 
-- **Log visible** — show or hide the panel.
+- **Auto-hide chat** — `On` (fade after inactivity, default) or `Off`
+  (keep the chat permanently visible).
+- **Hide after** — inactivity timeout before the chat fades out (2–30 s,
+  default 6 s).
+- **Fade duration** — transition speed in both directions (0.1–2.0 s,
+  default 0.4 s).
 - **Show timestamps** — prefix each entry with local `HH:MM:SS`.
 - **Max messages** — how many entries to keep (default 60).
 
@@ -403,9 +422,10 @@ The WebSocket relay (`ws_server.py`) is the source of truth for events:
   re-broadcasts them as `game_event` messages of type `chat` so everyone
   (including the sender) sees a consistent stream.
 
-Client-side, `game-log.js` (`LogBuffer` + `GameLogUI`) de-duplicates by
+Client-side, `game-log.js` (`LogBuffer` + `InlineChatUI`) de-duplicates by
 `seq`, fills out-of-order gaps, keeps only the most recent `maxMessages`,
-and renders each event type with its own color/icon.
+renders each event type with its own color/icon, and drives the
+auto-hiding/fading overlay through the DOM-free `InlineChatController`.
 
 ---
 

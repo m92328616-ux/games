@@ -20,6 +20,121 @@
   // Only the most recent `maxMessages` are kept (configurable), messages
   // auto-scroll to the latest, and each event type has its own colour/icon.
 
+  // ── Inline chat auto-hide (issue #37) ─────────────────────────────────
+  // An overlay controller that keeps the chat visible while there is
+  // activity and fades it out after a configurable period of inactivity.
+  // DOM-free so the fade/inactivity state machine can be unit tested; the
+  // InlineChatUI below binds it to the page.
+
+  function clampInt(v, lo, hi, dflt) {
+    const n = Number(v);
+    if (!isFinite(n)) return dflt;
+    return Math.max(lo, Math.min(hi, Math.round(n)));
+  }
+
+  function InlineChatController(opts) {
+    opts = opts || {};
+    this.autoHide = opts.autoHide !== false;
+    this.inactivityTimeout = clampInt(opts.inactivityTimeout, 1000, 60000, 6000);
+    this.fadeInMs = clampInt(opts.fadeInMs, 0, 3000, 250);
+    this.fadeOutMs = clampInt(opts.fadeOutMs, 0, 5000, 700);
+    this.onChange = typeof opts.onChange === 'function' ? opts.onChange : null;
+    this._setTimeout = opts.setTimeout || function (fn, ms) { return setTimeout(fn, ms); };
+    this._clearTimeout = opts.clearTimeout || function (id) { clearTimeout(id); };
+    // Start hidden when auto-hide is on (nothing to show yet); stay visible
+    // from the start when the user opted to keep the chat permanently shown.
+    this.visible = !this.autoHide;
+    this.opacity = this.visible ? 1 : 0;
+    this._timers = {};
+  }
+
+  InlineChatController.prototype._emit = function () {
+    if (this.onChange) this.onChange();
+  };
+
+  InlineChatController.prototype._clearOne = function (name) {
+    if (this._timers[name]) {
+      this._clearTimeout(this._timers[name]);
+      delete this._timers[name];
+    }
+  };
+
+  InlineChatController.prototype._clear = function () {
+    for (const k in this._timers) this._clearOne(k);
+  };
+
+  InlineChatController.prototype._after = function (name, ms, fn) {
+    this._clearOne(name);
+    if (ms <= 0) { fn(); return; }
+    const self = this;
+    this._timers[name] = this._setTimeout(function () {
+      delete self._timers[name];
+      fn();
+    }, ms);
+  };
+
+  // (Re)arm the inactivity fade-out, if auto-hide is enabled and the overlay
+  // is currently shown.
+  InlineChatController.prototype._scheduleHide = function () {
+    if (!this.autoHide || !this.visible) return;
+    const self = this;
+    this._after('hide', this.inactivityTimeout, function () {
+      self.opacity = 0;
+      self._emit();
+      // Wait for the fade-out transition, then drop the element.
+      self._after('off', self.fadeOutMs, function () {
+        self.visible = false;
+        self._emit();
+      });
+    });
+  };
+
+  // New activity: show the overlay and reset the inactivity timer.
+  InlineChatController.prototype.poke = function () {
+    this._clear();
+    this.visible = true;
+    this.opacity = 1;
+    this._emit();
+    this._scheduleHide();
+  };
+
+  // While the input is focused the chat stays up (no fade-out mid-typing).
+  InlineChatController.prototype.focus = function () {
+    this._clear();
+    this.visible = true;
+    this.opacity = 1;
+    this._emit();
+  };
+
+  // Leaving the input re-arms the inactivity timer.
+  InlineChatController.prototype.blur = function () { this.poke(); };
+
+  InlineChatController.prototype.setAutoHide = function (v) {
+    v = !!v;
+    if (v === this.autoHide) { this._scheduleHide(); return; }
+    this.autoHide = v;
+    if (v) {
+      this.poke(); // begin a fresh inactivity window
+    } else {
+      // Keep it permanently visible.
+      this._clear();
+      this.visible = true;
+      this.opacity = 1;
+      this._emit();
+    }
+  };
+
+  InlineChatController.prototype.setInactivityTimeout = function (ms) {
+    this.inactivityTimeout = clampInt(ms, 1000, 60000, 6000);
+    this._scheduleHide();
+  };
+
+  InlineChatController.prototype.setFadeDurations = function (inMs, outMs) {
+    this.fadeInMs = clampInt(inMs, 0, 3000, 250);
+    this.fadeOutMs = outMs == null ? this.fadeInMs : clampInt(outMs, 0, 5000, 700);
+    this._emit();
+  };
+
   // ── Event type metadata (colour + icon per event) ──────────────────────
   const EVENT_META = {
     join:     { color: '#7fdc8f', icon: '→' },
@@ -284,8 +399,78 @@
     if (this.countEl) this.countEl.textContent = String(this.buffer.rows.length);
   };
 
+  // ── InlineChatUI (auto-hiding inline overlay, issue #37) ───────────────
+  // Renders the LogBuffer as an inline overlay inside the game view (no box,
+  // no header) and fades it out after a configurable period of inactivity.
+  // It reappears instantly whenever a new message or event is pushed.
+  function InlineChatUI(opts) {
+    GameLogUI.call(this, opts);
+    opts = opts || {};
+    this.rootEl = opts.rootEl || null;
+    this.inputEl = opts.inputEl || null;
+    this.controller = new InlineChatController({
+      autoHide: opts.autoHide,
+      inactivityTimeout: opts.inactivityTimeout,
+      fadeInMs: opts.fadeInMs,
+      fadeOutMs: opts.fadeOutMs,
+      setTimeout: opts.setTimeout,
+      clearTimeout: opts.clearTimeout,
+      onChange: this._sync.bind(this),
+    });
+    this._lastOpacity = -1;
+    if (this.inputEl) {
+      this.inputEl.addEventListener('focus', () => this.controller.focus());
+      this.inputEl.addEventListener('blur', () => this.controller.blur());
+    }
+    this._sync();
+  }
+  InlineChatUI.prototype = Object.create(GameLogUI.prototype);
+  InlineChatUI.prototype.constructor = InlineChatUI;
+
+  InlineChatUI.prototype.push = function (ev) {
+    const rows = GameLogUI.prototype.push.call(this, ev);
+    if (rows && rows.length) this.controller.poke();
+    return rows;
+  };
+
+  InlineChatUI.prototype.loadHistory = function (events) {
+    const rows = GameLogUI.prototype.loadHistory.call(this, events);
+    if (rows && rows.length) this.controller.poke();
+    return rows;
+  };
+
+  InlineChatUI.prototype.setAutoHide = function (v) { this.controller.setAutoHide(!!v); };
+  InlineChatUI.prototype.setAlwaysVisible = function (v) { this.controller.setAutoHide(!v); };
+  InlineChatUI.prototype.setInactivityTimeout = function (ms) { this.controller.setInactivityTimeout(ms); };
+  InlineChatUI.prototype.setFadeDurations = function (inMs, outMs) { this.controller.setFadeDurations(inMs, outMs); };
+  InlineChatUI.prototype.poke = function () { this.controller.poke(); };
+  InlineChatUI.prototype.hide = function () {
+    this.controller._clear();
+    this.controller.visible = false;
+    this.controller.opacity = 0;
+    this.controller._emit();
+  };
+
+  // Apply the controller state to the DOM: opacity transitions use the
+  // configured fade duration in the direction we are moving.
+  InlineChatUI.prototype._sync = function () {
+    const c = this.controller;
+    const el = this.rootEl;
+    if (el) {
+      const dur = c.opacity >= this._lastOpacity ? c.fadeInMs : c.fadeOutMs;
+      el.style.transition = 'opacity ' + dur + 'ms ease';
+      el.style.opacity = String(c.opacity);
+      el.style.display = c.visible ? '' : 'none';
+      this._lastOpacity = c.opacity;
+    }
+  };
+
   function createUI(opts) {
     return new GameLogUI(opts);
+  }
+
+  function createInlineUI(opts) {
+    return new InlineChatUI(opts);
   }
 
   return {
@@ -295,7 +480,10 @@
     formatEvent,
     LogBuffer,
     GameLogUI,
+    InlineChatController,
+    InlineChatUI,
     createUI,
+    createInlineUI,
     DEFAULT_MAX_MESSAGES,
   };
 });

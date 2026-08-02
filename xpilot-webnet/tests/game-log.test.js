@@ -13,6 +13,7 @@ const assert = require('node:assert');
 
 const {
   LogBuffer,
+  InlineChatController,
   formatEvent,
   formatTimestamp,
 } = require('../game-log.js');
@@ -150,4 +151,152 @@ test('formatTimestamp renders HH:MM:SS and tolerates bad input', () => {
   // null/undefined means "no timestamp" and falls back to the current time.
   assert.match(formatTimestamp(null), /^\d\d:\d\d:\d\d$/);
   assert.strictEqual(formatTimestamp('not-a-date'), '');
+});
+
+// ── InlineChatController (auto-hide / fade, issue #37) ─────────────────
+// A minimal fake timer so the fade/inactivity state machine can be tested
+// deterministically without real wall-clock time.
+function makeFakeTimers() {
+  let now = 0;
+  const tasks = new Map();
+  let nextId = 1;
+  return {
+    now,
+    setTimeout(fn, ms) {
+      const id = nextId++;
+      tasks.set(id, { fn, at: now + ms });
+      return id;
+    },
+    clearTimeout(id) { tasks.delete(id); },
+    pending() { return tasks.size; },
+    advance(ms) {
+      const end = now + ms;
+      // Run timers in due-time order; a timer may schedule further timers.
+      for (;;) {
+        const due = [...tasks.entries()]
+          .filter(([, t]) => t.at <= end)
+          .sort((a, b) => a[1].at - b[1].at);
+        if (!due.length) break;
+        const [id, t] = due[0];
+        tasks.delete(id);
+        now = t.at;
+        t.fn();
+      }
+      now = end;
+    },
+  };
+}
+
+function makeController(timers, opts) {
+  opts = opts || {};
+  return new InlineChatController({
+    autoHide: opts.autoHide,
+    inactivityTimeout: opts.inactivityTimeout,
+    fadeInMs: opts.fadeInMs,
+    fadeOutMs: opts.fadeOutMs,
+    setTimeout: timers.setTimeout.bind(timers),
+    clearTimeout: timers.clearTimeout.bind(timers),
+    onChange: opts.onChange,
+  });
+}
+
+test('inline chat starts hidden when auto-hide is on and shows on activity', () => {
+  const timers = makeFakeTimers();
+  const ctrl = makeController(timers, { autoHide: true, inactivityTimeout: 5000, fadeInMs: 200, fadeOutMs: 300 });
+  assert.strictEqual(ctrl.visible, false);
+  assert.strictEqual(ctrl.opacity, 0);
+  ctrl.poke();
+  assert.strictEqual(ctrl.visible, true);
+  assert.strictEqual(ctrl.opacity, 1);
+});
+
+test('inline chat fades out after the inactivity timeout', () => {
+  const timers = makeFakeTimers();
+  const ctrl = makeController(timers, { autoHide: true, inactivityTimeout: 5000, fadeInMs: 200, fadeOutMs: 300 });
+  ctrl.poke();
+  assert.strictEqual(ctrl.visible, true);
+  timers.advance(4999);
+  assert.strictEqual(ctrl.visible, true, 'still visible just before the timeout');
+  timers.advance(1);
+  assert.strictEqual(ctrl.opacity, 0, 'opacity drops once the timeout elapses');
+  timers.advance(299);
+  assert.strictEqual(ctrl.visible, true, 'element lingers during the fade-out');
+  timers.advance(1);
+  assert.strictEqual(ctrl.visible, false, 'element is removed after the fade-out');
+});
+
+test('activity resets the inactivity timer', () => {
+  const timers = makeFakeTimers();
+  const ctrl = makeController(timers, { autoHide: true, inactivityTimeout: 3000, fadeInMs: 100, fadeOutMs: 100 });
+  ctrl.poke();
+  timers.advance(2000);
+  ctrl.poke(); // new message while still visible
+  assert.strictEqual(ctrl.visible, true);
+  timers.advance(2500);
+  assert.strictEqual(ctrl.visible, true, 'timer was reset by the second poke');
+  timers.advance(500);
+  timers.advance(100); // fade-out duration
+  assert.strictEqual(ctrl.visible, false, 'hides after a full inactivity window');
+});
+
+test('focus holds the chat visible and blur re-arms the timer', () => {
+  const timers = makeFakeTimers();
+  const ctrl = makeController(timers, { autoHide: true, inactivityTimeout: 3000, fadeInMs: 100, fadeOutMs: 100 });
+  ctrl.poke();
+  timers.advance(2500);
+  ctrl.focus();
+  timers.advance(5000);
+  assert.strictEqual(ctrl.visible, true, 'no fade-out while typing');
+  ctrl.blur();
+  timers.advance(2999);
+  assert.strictEqual(ctrl.visible, true);
+  timers.advance(1);
+  timers.advance(100); // fade-out duration
+  assert.strictEqual(ctrl.visible, false, 'blur restarts the countdown');
+});
+
+test('auto-hide off keeps the chat permanently visible', () => {
+  const timers = makeFakeTimers();
+  const ctrl = makeController(timers, { autoHide: false, inactivityTimeout: 3000, fadeInMs: 100, fadeOutMs: 100 });
+  assert.strictEqual(ctrl.visible, true, 'starts visible when permanently shown');
+  assert.strictEqual(ctrl.opacity, 1);
+  timers.advance(10000);
+  assert.strictEqual(ctrl.visible, true, 'never hides while auto-hide is off');
+});
+
+test('setAutoHide toggles between permanent and timed visibility', () => {
+  const timers = makeFakeTimers();
+  const ctrl = makeController(timers, { autoHide: true, inactivityTimeout: 2000, fadeInMs: 100, fadeOutMs: 100 });
+  ctrl.poke();
+  ctrl.setAutoHide(false);
+  timers.advance(5000);
+  assert.strictEqual(ctrl.visible, true, 'stays visible after disabling auto-hide');
+  ctrl.setAutoHide(true);
+  assert.strictEqual(ctrl.visible, true, 're-enabling auto-hide starts from visible');
+  timers.advance(2000);
+  timers.advance(100);
+  assert.strictEqual(ctrl.visible, false, 'hides after the window once auto-hide is back on');
+});
+
+test('setInactivityTimeout re-arms with the new delay', () => {
+  const timers = makeFakeTimers();
+  const ctrl = makeController(timers, { autoHide: true, inactivityTimeout: 5000, fadeInMs: 100, fadeOutMs: 100 });
+  ctrl.poke();
+  ctrl.setInactivityTimeout(1000);
+  timers.advance(1000);
+  timers.advance(100);
+  assert.strictEqual(ctrl.visible, false, 'hides using the updated timeout');
+});
+
+test('setFadeDurations updates both directions and emits a change', () => {
+  const timers = makeFakeTimers();
+  let emissions = 0;
+  const ctrl = makeController(timers, {
+    autoHide: true, inactivityTimeout: 5000, fadeInMs: 200, fadeOutMs: 300,
+    onChange: () => { emissions++; },
+  });
+  ctrl.setFadeDurations(50, 900);
+  assert.strictEqual(ctrl.fadeInMs, 50);
+  assert.strictEqual(ctrl.fadeOutMs, 900);
+  assert.ok(emissions >= 1);
 });
