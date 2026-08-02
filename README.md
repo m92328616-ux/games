@@ -106,7 +106,7 @@ This repository is a creation for games only. Explicit or malicious content will
 * NSFW or elxplicit content.
 * Rude or offensive commentry on any part of this repository.
 * Racist and sexual harm or violence will not be tolerated in this group project.
-* Distributing malware or exploits using our repository or any files inside will easily be confronted with Github Staff even State Police and may get you in seriious consequences.
+* Distributing malware or exploits using our repository or any files inside will easily be confronted with Github Staff and may get you in serious consequences.
 * Hosting sexually, obscene material, doxxing, and threatening violence will strictly break the rules and T&C's of ['Github's Acceptable Use Policies'](https://docs.github.com/en/site-policy/acceptable-use-policies/github-acceptable-use-policies)
 * Please refrain of using such illict actions.
 * Please read [`LICENSE`](LICENSE) and for further evaluation on responisibilities of this repository.
