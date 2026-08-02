@@ -110,7 +110,7 @@ This repository is a creation for games only. Explicit or malicious content will
 * Hosting sexually, obscene material, doxxing, and threatening violence will strictly break the rules and T&C's of ['Github's Acceptable Use Policies'](https://docs.github.com/en/site-policy/acceptable-use-policies/github-acceptable-use-policies)
 * Please refrain of using such illict actions.
 * Please read [`LICENSE`](LICENSE) and for further evaluation on responisibilities of this repository.
-* Please read [`CODE_OF_CONDUCT.md`](CODE OF CONDUCT) to follow up on saftey guidelines and procedures of this repository.
+* Please read our Code of Conduct to follow up on saftey guidelines and procedures of this repository.
 
 Thank you for following these rules set up here so we can maintain a happy community of people who want to code.
 
