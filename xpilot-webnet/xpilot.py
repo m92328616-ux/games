@@ -11,7 +11,15 @@ import argparse
 
 import pvp_system
 
-from log_interface import get_logger, start_log_server, stop_log_server
+from log_interface import (
+    get_logger,
+    parse_forward_address,
+    set_log_level,
+    start_log_forward,
+    start_log_server,
+    stop_log_forward,
+    stop_log_server,
+)
 
 log = get_logger("Game")
 net_log = get_logger("Network")
@@ -333,8 +341,7 @@ class NetworkClient:
             pass
 
 
-def main(server_host=None, server_port=50000, log_port=9000):
-    start_log_server(port=log_port)
+def main(server_host=None, server_port=50000):
     log.info("Game starting")
 
     pygame.init()
@@ -540,10 +547,34 @@ if __name__ == "__main__":
     parser.add_argument("--server", help="server host to connect to (run net_server.py separately)")
     parser.add_argument("--port", type=int, default=50000, help="server UDP port")
     parser.add_argument("--log-port", type=int, default=9000, help="TCP port for external log terminal (default: 9000)")
+    parser.add_argument(
+        "--log-level", default="debug",
+        choices=("debug", "info", "warning", "error", "critical"),
+        help="Minimum log level to emit (default: debug)",
+    )
+    parser.add_argument(
+        "--log-forward", default=None, metavar="HOST:PORT",
+        help="Instead of hosting a log listener, push all log entries to a "
+             "central log server at HOST:PORT (e.g. 127.0.0.1:9000)",
+    )
     args = parser.parse_args()
+    set_log_level(args.log_level)
+    if args.log_forward:
+        fwd_host, fwd_port = parse_forward_address(args.log_forward)
+        start_log_forward(fwd_host, fwd_port)
+    else:
+        start_log_server(port=args.log_port)
     try:
-        main(args.server, args.port, args.log_port)
+        main(args.server, args.port)
+    except KeyboardInterrupt:
+        log.info("Game shutting down")
+        pygame.quit()
+        stop_log_server()
+        stop_log_forward()
+        sys.exit(0)
     except Exception as e:
         log.critical(f"Fatal error: {e}")
         pygame.quit()
+        stop_log_server()
+        stop_log_forward()
         sys.exit(1)

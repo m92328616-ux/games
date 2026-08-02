@@ -63,7 +63,15 @@ import http.server
 import socketserver
 import threading
 
-from log_interface import get_logger, start_log_server, stop_log_server
+from log_interface import (
+    get_logger,
+    parse_forward_address,
+    set_log_level,
+    start_log_forward,
+    start_log_server,
+    stop_log_forward,
+    stop_log_server,
+)
 from pickup_sync import PowerUpManager
 
 log = get_logger("WSServer")
@@ -369,12 +377,28 @@ if __name__ == "__main__":
         help="HTTP port for GET /status (0 to disable)",
     )
     parser.add_argument("--log-port", type=int, default=9000, help="TCP port for external log terminal (default: 9000)")
+    parser.add_argument(
+        "--log-level", default="debug",
+        choices=("debug", "info", "warning", "error", "critical"),
+        help="Minimum log level to emit (default: debug)",
+    )
+    parser.add_argument(
+        "--log-forward", default=None, metavar="HOST:PORT",
+        help="Instead of hosting a log listener, push all log entries to a "
+             "central log server at HOST:PORT (e.g. 127.0.0.1:9000)",
+    )
     args = parser.parse_args()
 
-    start_log_server(port=args.log_port)
+    set_log_level(args.log_level)
+    if args.log_forward:
+        fwd_host, fwd_port = parse_forward_address(args.log_forward)
+        start_log_forward(fwd_host, fwd_port)
+    else:
+        start_log_server(port=args.log_port)
     try:
         asyncio.run(main(args.host, args.port, args.http_port if args.http_port else None))
     except KeyboardInterrupt:
         log.info("Shutting down")
     finally:
         stop_log_server()
+        stop_log_forward()

@@ -163,9 +163,9 @@ Connected to log server at 127.0.0.1:9000
 
 ### Custom port
 
-The desktop game client, WebSocket server, and web server all accept a
-`--log-port` flag to change the TCP port (default `9000`). Both the
-game/server and the log viewer must use the same port:
+The desktop game client, WebSocket server, web server, and UDP relay
+server all accept a `--log-port` flag to change the TCP port (default
+`9000`). Both the game/server and the log viewer must use the same port:
 
 ```bash
 # Game on a custom port
@@ -174,6 +174,26 @@ python xpilot.py --log-port 9100
 # Log viewer connecting to that port
 python log_terminal.py --port 9100
 ```
+
+### Log levels & filtering
+
+Every log entry carries a severity level: `DEBUG`, `INFO`, `WARNING`,
+`ERROR`, or `CRITICAL`. All game processes accept a `--log-level` flag
+to set the global minimum level that gets emitted (default `debug`).
+Anything below that level is filtered out before it is printed or
+streamed — useful for quieting verbose `DEBUG` output:
+
+```bash
+# Only show warnings and above
+python xpilot.py --log-level warning
+python ws_server.py --log-level warning
+python web-server.py --log-level warning
+python net_server.py --log-level warning
+```
+
+Programmatically, use `set_log_level("info")` (a name or an int) in
+`log_interface.py`; individual loggers can be stricter with
+`get_logger("MyModule", level=ERROR)`.
 
 ### Remote monitoring
 
@@ -190,21 +210,33 @@ python log_terminal.py --host 192.168.1.100 --port 9000
 
 ### Using with servers
 
-The WebSocket server and web server also stream logs:
+The WebSocket server, web server, UDP relay server, and desktop client all
+stream logs. Every process hosts its own log server on `--log-port` (default
+`9000`), so only one process can bind a given port at a time. To aggregate
+**multiple** processes into a single viewer on one port, pick one process as
+the log host and point the others at it with `--log-forward HOST:PORT`:
 
 ```bash
-# Start servers
-python ws_server.py --log-port 9000
-python web-server.py --log-port 9000
+# Hosts the log listener on port 9000
+python ws_server.py --host 0.0.0.0 --port 8765 --log-port 9000
 
-# Watch all logs in one terminal
-python log_terminal.py
+# Pushes all its log entries to the host (no listener of its own)
+python web-server.py --host 0.0.0.0 --port 8000 --log-forward 127.0.0.1:9000
+
+# Watch every process's logs in one terminal
+python log_terminal.py --port 9000
 ```
 
-Because each process runs its own log server on the same port, you can
-only run **one** at a time on port 9000. If you need multiple processes
-to stream to the same viewer, run each on a different port and open
-multiple viewer instances:
+`--log-forward HOST:PORT` accepts a bare port too (`--log-forward :9000`
+defaults to `127.0.0.1`). The forwarder reconnects automatically if the
+host is down, buffers entries while disconnected, and never echoes your own
+entries back. Each forwarded entry keeps its original `source`, so you can
+see exactly which process logged what. The log host can also be a plain
+`log_terminal.py`-style process; the desktop client (`xpilot.py`) supports
+`--log-forward` as well.
+
+If you prefer separate viewers per process instead, give each a distinct
+port as before:
 
 ```bash
 # Different ports for each process

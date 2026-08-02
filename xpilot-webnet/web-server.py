@@ -28,13 +28,27 @@ import json
 import subprocess
 import sys
 
-from log_interface import get_logger, start_log_server, stop_log_server
+from log_interface import (
+    get_logger,
+    parse_forward_address,
+    set_log_level,
+    start_log_forward,
+    start_log_server,
+    stop_log_forward,
+    stop_log_server,
+)
 
 log = get_logger("WebServer")
 
 SERVE_DIR = os.path.dirname(__file__)
 HTTPS_ENABLED = False
 BOUND_PORT = None
+
+
+class ReusableTCPServer(socketserver.TCPServer):
+    """TCPServer that sets SO_REUSEADDR so the port frees up on restart."""
+
+    allow_reuse_address = True
 
 
 def ensure_self_signed_cert(cert_path, key_path):
@@ -122,6 +136,16 @@ if __name__ == '__main__':
     parser.add_argument('--cert', default=None, help='Path to TLS certificate (PEM). Auto-generated if omitted.')
     parser.add_argument('--key', default=None, help='Path to TLS private key (PEM). Auto-generated if omitted.')
     parser.add_argument('--log-port', type=int, default=9000, help='TCP port for external log terminal (default: 9000)')
+    parser.add_argument(
+        '--log-level', default='debug',
+        choices=('debug', 'info', 'warning', 'error', 'critical'),
+        help='Minimum log level to emit (default: debug)',
+    )
+    parser.add_argument(
+        '--log-forward', default=None, metavar='HOST:PORT',
+        help='Instead of hosting a log listener, push all log entries to a '
+             'central log server at HOST:PORT (e.g. 127.0.0.1:9000)',
+    )
     args = parser.parse_args()
 
     os.chdir(SERVE_DIR)
@@ -129,11 +153,16 @@ if __name__ == '__main__':
     HTTPS_ENABLED = args.https
     BOUND_PORT = args.port
 
-    start_log_server(port=args.log_port)
+    set_log_level(args.log_level)
+    if args.log_forward:
+        fwd_host, fwd_port = parse_forward_address(args.log_forward)
+        start_log_forward(fwd_host, fwd_port)
+    else:
+        start_log_server(port=args.log_port)
     log.info("Web server starting")
 
     Handler = GameHTTPHandler
-    httpd = socketserver.TCPServer((args.host, args.port), Handler)
+    httpd = ReusableTCPServer((args.host, args.port), Handler)
 
     scheme = 'http'
     if args.https:
@@ -161,3 +190,4 @@ if __name__ == '__main__':
         log.info("Shutting down...")
     finally:
         stop_log_server()
+        stop_log_forward()
