@@ -19,6 +19,10 @@ Protocol (JSON messages, one per WebSocket text frame):
     {"type": "pickup_request", "id": "...", "pickupId": "..."}  # collect a power-up
     {"type": "pickup_hit", "id": "...", "pickupId": "...", "dmg": int,
      "firedBy": "player"|"enemy"}                            # bullet damaged a power-up
+    {"type": "player_hit", "id": "...", "target": "...", "dmg": int}  # PvP hit report
+    {"type": "player_hp", "id": "...", "hp": int, "dead": bool,
+     "killer": "..."}                                   # host-authoritative PvP HP
+    {"type": "player_respawn", "id": "..."}             # player wants to respawn
     {"type": "leave", "id": "..."}
 
   Server -> Clients (broadcast to everyone except sender, plus a couple
@@ -29,6 +33,9 @@ Protocol (JSON messages, one per WebSocket text frame):
     {"type": "player_joined", "id": "...", "name": "..."}
     {"type": "player_left", "id": "..."}
     {"type": "roster", "players": [...]}              (sent to the joiner only)
+    {"type": "player_hit", ...}                       (relayed, host applies)
+    {"type": "player_hp", ...}                        (relayed, all clients apply)
+    {"type": "player_respawn", ...}                   (relayed, host resets HP)
 
   Server -> Clients (server-authoritative power-up sync):
     {"type": "pickup_state", "seq": int, "pickups": [...]}       (full snapshot)
@@ -229,6 +236,26 @@ async def handler(ws):
                         if cid in CLIENTS:
                             CLIENTS[cid]["last_seen"] = now()
                 await broadcast(msg, exclude_id=cid)
+
+            elif mtype in ("player_hit", "player_hp", "player_respawn"):
+                # PvP messages. The relay server does not own PvP state (the
+                # host-elected client is authoritative), so it simply relays:
+                #   * player_hit      — non-host reports damage to the host
+                #   * player_hp       — host broadcasts authoritative HP to all
+                #   * player_respawn  — a player asks the host to reset their HP
+                #
+                # The sender's socket never needs its own message back: for
+                # player_hit/player_respawn the sender authored it, and for
+                # player_hp the sender (the host) already holds the state it
+                # just broadcast. So exclude by the connection's client_id
+                # rather than by the message's "id" field, which for
+                # player_hp names the *affected* player (the target) and must
+                # still reach that client.
+                if client_id:
+                    async with CLIENTS_LOCK:
+                        if client_id in CLIENTS:
+                            CLIENTS[client_id]["last_seen"] = now()
+                await broadcast(msg, exclude_id=client_id)
 
             elif mtype == "leave":
                 cid = msg.get("id")

@@ -70,10 +70,13 @@
         <span style="color:#c87878">● circle</span> 10pts&nbsp;
         <span style="color:#f0a050">▲ shooter</span> 20pts&nbsp;
         <span style="color:#b07fe0">■ tank</span> 50pts<br>
+        <span id="hpLine" style="display:none;">HP: <span id="hpValue">3/3</span></span><br>
         <span id="connStatus" style="color:#888">Offline (single player)</span>
-        <span id="playerCount"></span>
+        <span id="playerCount"></span><br>
+        <button id="pvpBtn" style="margin-top:4px;padding:2px 8px;font-family:monospace;font-size:12px;cursor:pointer;background:#333;color:#ccc;border:1px solid #666;border-radius:3px;">PvP: OFF</button>
     </div>
     <div id="deadMsg">You Died<br>Press R to restart</div>
+    <div id="killFeed" style="position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:150;pointer-events:none;font-family:monospace;font-size:12px;color:#e8e8e8;text-align:center;text-shadow:0 1px 2px #000;"></div>
     <div id="controls">
         <div class="joystick-area" id="joystick"></div>
         <div class="buttons-area">
@@ -85,6 +88,7 @@
 </div>
 
 <script async src="https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js"></script>
+<script src="./pvp-system.js"></script>
 <script>
 async function main() {
     // The pyodide.js <script> above is async; wait for it to finish loading
@@ -115,6 +119,11 @@ N_CIRCLES  = 14
 N_SHOOTERS = 8
 N_TANKS    = 5
 
+# PvP constants (kept in sync with pvp-system.js on the JS side)
+PLAYER_MAX_HP = 3
+RAM_DAMAGE = 1
+RAM_COOLDOWN = 2.0
+
 def wrap(v, size): return v % size
 
 class Player:
@@ -122,6 +131,7 @@ class Player:
         self.x=WORLD_W/2; self.y=WORLD_H/2
         self.vx=self.vy=self.angle=self.thrust=0
         self.dead=False
+        self.hp=PLAYER_MAX_HP; self.max_hp=PLAYER_MAX_HP
     def update(self, dt):
         self.vx += math.cos(self.angle)*self.thrust*dt
         self.vy += math.sin(self.angle)*self.thrust*dt
@@ -222,6 +232,20 @@ game = make_game()
 def reset_game():
     global game; game = make_game()
 
+def force_reset():
+    global game; game = make_game()
+
+def get_player_dead():
+    return game['player'].dead
+
+def set_spawn(x, y):
+    p=game['player']; p.x=x; p.y=y; p.vx=p.vy=p.thrust=0
+
+def set_player_hp(hp, dead):
+    p=game['player']
+    p.hp=max(0, min(p.max_hp, int(hp)))
+    p.dead=bool(dead)
+
 def set_key(key, pressed):
     game['keys'][key]=pressed
     if key=='r' and pressed and game['player'].dead: reset_game()
@@ -286,6 +310,7 @@ def draw():
         'ebullets':[[b.x,b.y] for b in game['ebullets']],
         'entities':[[e.x,e.y,e.r,e.kind,getattr(e,'angle',0.0),e.hp,e.max_hp,e.hit_flash] for e in game['entities']],
         'score':game['score'],
+        'hp':p.hp, 'max_hp':p.max_hp,
         'just_shot': list(game['just_shot']) if game['just_shot'] else None,
     }
 `;
@@ -299,6 +324,10 @@ def draw():
     const pyUpdate = pyodide.globals.get('update');
     const pyDraw   = pyodide.globals.get('draw');
     const pySetKey = pyodide.globals.get('set_key');
+    const pyForceReset = pyodide.globals.get('force_reset');
+    const pyGetDead    = pyodide.globals.get('get_player_dead');
+    const pySetSpawn   = pyodide.globals.get('set_spawn');
+    const pySetPlayerHp= pyodide.globals.get('set_player_hp');
 
     // ── Input ─────────────────────────────────────────────────────────────
     const joystickEl = document.getElementById('joystick');
@@ -318,7 +347,8 @@ def draw():
     document.getElementById('thrustBtn').addEventListener('touchend',  ()=>{touch.thrust=false;});
     document.getElementById('shootBtn').addEventListener('touchstart', e=>{e.preventDefault();touch.shoot=true;});
     document.getElementById('shootBtn').addEventListener('touchend',   e=>{e.preventDefault();touch.shoot=false;});
-    document.getElementById('restartBtn').addEventListener('touchstart',()=>{pySetKey('r',true);document.getElementById('restartBtn').style.display='none';});
+    document.getElementById('restartBtn').addEventListener('touchstart',()=>{doRestart();});
+    document.getElementById('pvpBtn').addEventListener('click',()=>{setPvpMode(!pvpMode);});
 
     const keyMap = {
         'ArrowUp':'up','w':'up','W':'up',
@@ -326,7 +356,11 @@ def draw():
         'ArrowRight':'right','d':'right','D':'right',
         ' ':'space','Space':'space','r':'r','R':'r'
     };
-    window.addEventListener('keydown',e=>{if(keyMap[e.key]) pySetKey(keyMap[e.key],true);});
+    window.addEventListener('keydown',e=>{
+        if(e.key==='r'||e.key==='R'){ doRestart(); return; }
+        if(e.key==='v'||e.key==='V'){ setPvpMode(!pvpMode); return; }
+        if(keyMap[e.key]) pySetKey(keyMap[e.key],true);
+    });
     window.addEventListener('keyup',  e=>{if(keyMap[e.key]) pySetKey(keyMap[e.key],false);});
 
     // ── Multiplayer networking ───────────────────────────────────────────
@@ -335,6 +369,14 @@ def draw():
     let remotePlayers = {};   // id -> { x, y, angle, dead, name, lastUpdate }
     let remoteBullets = [];   // bullets fired by other players (cosmetic only)
     let ws = null;
+    // ── PvP state (issue #10) ─────────────────────────────────────────────
+    const PVP_MAX_HP = PvPSystem.PLAYER_MAX_HP;
+    let pvpMode = false;
+    let allKnownIds = new Set([MY_ID]);
+    let isHost = true;
+    let playersHP = {};       // host-authoritative {id: {hp,maxHp,dead}}
+    let ramCooldowns = {};    // {remoteId: timeLeft} to avoid repeated ram damage
+    let killFeed = [];        // {killer, target, t} latest eliminations
     let netState = 'offline';
     const STATE_SEND_HZ = 15;
     let stateSendAccum = 0;
@@ -366,6 +408,63 @@ def draw():
                         : state === 'connecting' ? '#e0c060'
                         : state === 'error'      ? '#e07070'
                         :                           '#888';
+    }
+
+    function reelectHost(){ isHost = ([...allKnownIds].sort()[0] === MY_ID); }
+
+    function playerDisplayName(id){
+        if (id === MY_ID) return myName;
+        const rp = remotePlayers[id];
+        return (rp && rp.name) || String(id).slice(0,6);
+    }
+
+    function showKillFeed(killer, target){
+        killFeed.push({killer, target, t: 4.0});
+        if (killFeed.length > 5) killFeed.shift();
+    }
+
+    function setPvpMode(v){
+        pvpMode = !!v;
+        const btn = document.getElementById('pvpBtn');
+        if (btn) btn.textContent = 'PvP: ' + (pvpMode ? 'ON' : 'OFF');
+        document.getElementById('hpLine').style.display = pvpMode ? '' : 'none';
+        const spawn = pvpMode ? PvPSystem.spawnPointForId(MY_ID, WORLD_W, WORLD_H) : {x:WORLD_W/2, y:WORLD_H/2};
+        pySetSpawn(spawn.x, spawn.y);
+        pySetPlayerHp(PVP_MAX_HP, false);
+        if (pvpMode && isHost) playersHP[MY_ID] = PvPSystem.createPlayerHPState();
+    }
+
+    // Host-authoritative PvP: only the host applies damage and broadcasts the
+    // resulting HP; every other client reports hits and waits for the reply.
+    function applyDamageLocal(targetId, dmg, killerId){
+        if (!playersHP[targetId]) playersHP[targetId] = PvPSystem.createPlayerHPState();
+        const res = PvPSystem.applyPlayerDamage(playersHP[targetId], dmg);
+        const hp = playersHP[targetId].hp, dead = playersHP[targetId].dead;
+        if (targetId === MY_ID) { pySetPlayerHp(hp, dead); }
+        else { const rp = remotePlayers[targetId]; if (rp) { rp.hp = hp; rp.dead = dead; } }
+        try { ws.send(JSON.stringify({type:'player_hp', id:targetId, hp:hp, dead:!!dead, killer:killerId})); } catch(e) {}
+        if (res.lethal) showKillFeed(killerId, targetId);
+    }
+
+    function reportHit(targetId, dmg, killerId){
+        if (!pvpMode || !ws || ws.readyState !== WebSocket.OPEN) return;
+        if (isHost) applyDamageLocal(targetId, dmg, killerId);
+        else { try { ws.send(JSON.stringify({type:'player_hit', id:killerId, target:targetId, dmg:dmg})); } catch(e) {} }
+    }
+
+    function doRestart(){
+        if (!pyGetDead()) return; // R only restarts after death (same as single player)
+        pyForceReset();
+        document.getElementById('restartBtn').style.display='none';
+        if (pvpMode) {
+            const spawn = PvPSystem.spawnPointForId(MY_ID, WORLD_W, WORLD_H);
+            pySetSpawn(spawn.x, spawn.y);
+            pySetPlayerHp(PVP_MAX_HP, false);
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                if (!isHost) { try { ws.send(JSON.stringify({type:'player_respawn', id:MY_ID})); } catch(e) {} }
+                else if (playersHP[MY_ID]) playersHP[MY_ID] = PvPSystem.createPlayerHPState();
+            }
+        }
     }
 
     function wsUrlGuess() {
@@ -403,13 +502,17 @@ def draw():
         if (msg.type === 'roster') {
             (msg.players || []).forEach(p => {
                 if (p.id === MY_ID) return;
+                allKnownIds.add(p.id);
                 upsertRemote(p.id, p.name, p.state);
             });
+            reelectHost();
             updatePlayerCount();
             return;
         }
         if (msg.type === 'player_joined') {
             if (msg.id === MY_ID) return;
+            allKnownIds.add(msg.id);
+            reelectHost();
             if (!remotePlayers[msg.id]) {
                 remotePlayers[msg.id] = {
                     x: 1600, y: 1200, angle: 0, dead: false,
@@ -417,22 +520,61 @@ def draw():
                     lastUpdate: performance.now() / 1000,
                 };
             }
+            if (pvpMode && isHost) playersHP[msg.id] = PvPSystem.createPlayerHPState();
             updatePlayerCount();
             return;
         }
         if (msg.type === 'player_left') {
+            allKnownIds.delete(msg.id);
+            reelectHost();
             delete remotePlayers[msg.id];
+            if (pvpMode && isHost) delete playersHP[msg.id];
             updatePlayerCount();
             return;
         }
         if (msg.type === 'state') {
             if (msg.id === MY_ID) return;
+            if (!allKnownIds.has(msg.id)) { allKnownIds.add(msg.id); reelectHost(); }
             upsertRemote(msg.id, msg.name, msg);
             return;
         }
         if (msg.type === 'shoot') {
             if (msg.id === MY_ID) return;
-            remoteBullets.push({ x: msg.x, y: msg.y, vx: msg.vx, vy: msg.vy, life: 2.2 });
+            remoteBullets.push({ x: msg.x, y: msg.y, vx: msg.vx, vy: msg.vy, life: 2.2, owner: msg.id });
+            return;
+        }
+        if (msg.type === 'player_hit') {
+            if (!pvpMode || !isHost) return;
+            const target = msg.target, attacker = msg.id, dmg = msg.dmg || 1;
+            if (!target) return;
+            applyDamageLocal(target, dmg, attacker);
+            return;
+        }
+        if (msg.type === 'player_hp') {
+            if (!pvpMode) return;
+            const pid = msg.id; if (!pid) return;
+            if (pid === MY_ID) {
+                pySetPlayerHp(msg.hp, !!msg.dead);
+                if (msg.dead) showKillFeed(msg.killer, pid);
+            } else {
+                const rp = remotePlayers[pid];
+                if (rp) { rp.hp = msg.hp; rp.dead = !!msg.dead; }
+            }
+            if (isHost && playersHP[pid]) { playersHP[pid].hp = msg.hp; playersHP[pid].dead = !!msg.dead; }
+            if (msg.dead && pid !== MY_ID) showKillFeed(msg.killer, pid);
+            return;
+        }
+        if (msg.type === 'player_respawn') {
+            if (!pvpMode) return;
+            const pid = msg.id; if (!pid) return;
+            if (isHost) {
+                playersHP[pid] = PvPSystem.createPlayerHPState();
+                try { ws.send(JSON.stringify({type:'player_hp', id:pid, hp:playersHP[pid].hp, dead:false, killer:''})); } catch(e) {}
+            } else if (pid === MY_ID) {
+                pySetPlayerHp(PVP_MAX_HP, false);
+                const spawn = PvPSystem.spawnPointForId(MY_ID, WORLD_W, WORLD_H);
+                pySetSpawn(spawn.x, spawn.y);
+            }
             return;
         }
     }
@@ -452,6 +594,8 @@ def draw():
         remotePlayers[id] = {
             x: state.x, y: state.y, angle: state.angle || 0,
             dead: !!state.dead,
+            hp: state.hp !== undefined ? state.hp : (remotePlayers[id] && remotePlayers[id].hp) || PVP_MAX_HP,
+            maxHp: state.maxHp !== undefined ? state.maxHp : PVP_MAX_HP,
             name: name || (remotePlayers[id] && remotePlayers[id].name) || id.slice(0, 6),
             lastUpdate: performance.now() / 1000,
             _prevX: px, _prevY: py, _prevAngle: pa, _lerp: lp,
@@ -470,11 +614,12 @@ def draw():
         let changed = false;
         for (const id in remotePlayers) {
             if (now - remotePlayers[id].lastUpdate > REMOTE_TIMEOUT) {
+                allKnownIds.delete(id);
                 delete remotePlayers[id];
                 changed = true;
             }
         }
-        if (changed) updatePlayerCount();
+        if (changed) { reelectHost(); updatePlayerCount(); }
     }
 
     function sendNetState(dt, st) {
@@ -486,6 +631,7 @@ def draw():
             type: 'state', id: MY_ID, name: myName,
             x: st.px, y: st.py, angle: st.pa,
             vx: st.pvx, vy: st.pvy, dead: st.dead,
+            hp: st.hp, maxHp: st.max_hp,
         }));
     }
 
@@ -535,6 +681,40 @@ def draw():
         for (const id in remotePlayers) {
             const rp = remotePlayers[id];
             if (rp._lerp !== undefined && rp._lerp < 1) rp._lerp = Math.min(1, rp._lerp + dt * STATE_SEND_HZ);
+        }
+
+        // ── PvP combat (issue #10) ─────────────────────────────────────────
+        if (pvpMode && ws && ws.readyState === WebSocket.OPEN) {
+            // My bullets hitting remote players. Only the bullet's owner
+            // reports a hit — the target client must NOT report the same
+            // collision back, or the host would apply the damage twice.
+            for (const [bx, by] of st.pbullets) {
+                for (const id in remotePlayers) {
+                    const rp = remotePlayers[id];
+                    if (rp.dead) continue;
+                    const ip = renderPose(rp);
+                    const rxp = ip ? ip.x : rp.x, ryp = ip ? ip.y : rp.y;
+                    if (PvPSystem.distanceBetween(bx, by, rxp, ryp, WORLD_W, WORLD_H) < PvPSystem.BULLET_HIT_RADIUS) {
+                        reportHit(id, 1, MY_ID);
+                        break;
+                    }
+                }
+            }
+            // My ship ramming remote players (cooldown-gated)
+            if (!st.dead) {
+                for (const id in remotePlayers) {
+                    const rp = remotePlayers[id];
+                    if (rp.dead) continue;
+                    if ((ramCooldowns[id] || 0) > 0) continue;
+                    const ip = renderPose(rp);
+                    const rxp = ip ? ip.x : rp.x, ryp = ip ? ip.y : rp.y;
+                    if (PvPSystem.distanceBetween(st.px, st.py, rxp, ryp, WORLD_W, WORLD_H) < PvPSystem.RAM_HIT_RADIUS) {
+                        reportHit(id, PvPSystem.RAM_DAMAGE, MY_ID);
+                        ramCooldowns[id] = PvPSystem.RAM_COOLDOWN;
+                    }
+                }
+            }
+            for (const id in ramCooldowns) { ramCooldowns[id] -= dt; if (ramCooldowns[id] <= 0) delete ramCooldowns[id]; }
         }
 
         const WORLD_W=3200, WORLD_H=2400, VIEW_W=800, VIEW_H=600;
@@ -662,6 +842,12 @@ def draw():
             ctx.lineTo(rx+r[0]*s*0.7,ry+r[1]*s*0.7);
             ctx.lineTo(rx+l[0]*s*0.7,ry+l[1]*s*0.7);
             ctx.closePath(); ctx.fill();
+            if (pvpMode && rp.maxHp > 0) {
+                const bw=22*scx, bh=3*scx, bx2=rx-bw/2, by2=ry-26*scx;
+                ctx.fillStyle='rgba(0,0,0,0.6)'; ctx.fillRect(bx2,by2,bw,bh);
+                const frac=Math.max(0,Math.min(1,(rp.hp!==undefined?rp.hp:rp.maxHp)/rp.maxHp));
+                ctx.fillStyle=`hsl(${Math.round(frac*110)},80%,50%)`; ctx.fillRect(bx2,by2,bw*frac,bh);
+            }
             ctx.fillStyle='#9fe0a8'; ctx.font='11px monospace'; ctx.textAlign='center';
             ctx.fillText(rp.name || id.slice(0,6), rx, ry - 18*scx);
         }
@@ -683,8 +869,18 @@ def draw():
 
         // HUD
         document.getElementById('score').textContent=st.score;
+        const hpEl=document.getElementById('hpValue');
+        if(hpEl) hpEl.textContent=`${Math.max(0,st.hp||0)}/${st.max_hp||0}`;
         document.getElementById('deadMsg').style.display=st.dead?'block':'none';
         if(st.dead) document.getElementById('restartBtn').style.display='block';
+        killFeed = killFeed.filter(k=>k.t>0);
+        const kfEl=document.getElementById('killFeed');
+        if(kfEl){
+            kfEl.innerHTML=killFeed.slice(-4).map(k=>
+                `<div>${playerDisplayName(k.killer)} <span style="color:#f07070">killed</span> ${playerDisplayName(k.target)}</div>`
+            ).join('');
+        }
+        for(const k of killFeed) k.t-=dt;
 
         // Minimap
         const mw=mm.width, mh=mm.height;
