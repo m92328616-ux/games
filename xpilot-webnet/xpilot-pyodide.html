@@ -83,6 +83,30 @@
         }
         #chatInput:focus { border-color: #6080ff; }
         #chatInput::placeholder { color: #8a92b8; }
+        /* ── Chat / Log settings (issue #37) ── */
+        #settingsBtn {
+            position: absolute; top: 8px; right: 10px; z-index: 500;
+            width: 34px; height: 34px; background: rgba(20,20,42,0.7);
+            border: 1px solid #4a4a8a; border-radius: 6px; color: #a0b0ff;
+            font-size: 17px; cursor: pointer; font-family: monospace; line-height: 1;
+        }
+        #settingsBtn:hover { background: #2a2a5a; color: #fff; }
+        #settingsOverlay { display: none; position: fixed; inset: 0; z-index: 600; background: rgba(0,0,0,0.65); backdrop-filter: blur(4px); align-items: center; justify-content: center; }
+        #settingsOverlay.open { display: flex; }
+        #settingsPanel { background: #14142a; border: 1px solid #3a3a6a; border-radius: 10px; padding: 24px 28px; width: min(440px,94vw); max-height: 90vh; overflow-y: auto; color: #d0d0e8; font-family: monospace; position: relative; }
+        #settingsPanel h2 { font-size: 17px; color: #a0b0ff; margin-bottom: 18px; letter-spacing: 1px; text-transform: uppercase; }
+        .s-close { position: absolute; top: 14px; right: 16px; background: none; border: none; color: #888; font-size: 22px; cursor: pointer; line-height: 1; }
+        .s-close:hover { color: #fff; }
+        .s-section { font-size: 11px; color: #6070a0; letter-spacing: 1px; text-transform: uppercase; margin: 18px 0 8px; border-bottom: 1px solid #2a2a50; padding-bottom: 4px; }
+        .s-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+        .s-row label { font-size: 13px; color: #b0b8d8; flex: 1; }
+        .s-row .s-val { font-size: 12px; color: #7080c0; min-width: 48px; text-align: right; }
+        .s-row input[type=range] { flex: 2; accent-color: #6080ff; height: 4px; cursor: pointer; }
+        .s-row select { flex: 2; background: #0e0e22; border: 1px solid #3a3a6a; color: #d0d0f0; padding: 5px 8px; border-radius: 4px; font-family: monospace; font-size: 13px; cursor: pointer; }
+        .s-btn { padding: 8px 14px; background: #2a2a5a; border: 1px solid #4a4a8a; color: #a0b0ff; border-radius: 5px; cursor: pointer; font-family: monospace; font-size: 13px; }
+        .s-btn:hover { background: #3a3a7a; color: #fff; }
+        .s-btn.primary { background: #304090; border-color: #6080ff; }
+        .s-btn.primary:hover { background: #405098; }
         @media (max-width: 480px) { #info { font-size: 12px; } .control-btn { width: 70px; font-size: 11px; } }
     </style>
 </head>
@@ -110,6 +134,25 @@
     <div id="inlineChat">
         <div id="inlineChatList"></div>
         <input id="chatInput" type="text" maxlength="240" placeholder="Chat (T) — press Enter to send" autocomplete="off">
+    </div>
+    <button id="settingsBtn" title="Chat / Log settings (pauses game)">⚙</button>
+    <!-- Chat / Log settings overlay (issue #37) -->
+    <div id="settingsOverlay">
+        <div id="settingsPanel">
+            <button class="s-close" id="settingsClose">✕</button>
+            <h2>⚙ Settings</h2>
+            <div class="s-section">Chat / Log</div>
+            <div class="s-row"><label>Auto-hide chat</label><select id="sLogAutoHide"><option value="1">On</option><option value="0">Off (always visible)</option></select></div>
+            <div class="s-row"><label>Hide after</label><input type="range" id="sLogTimeout" min="2" max="30" step="1" value="6"><span class="s-val" id="sLogTimeoutVal">6s</span></div>
+            <div class="s-row"><label>Fade duration</label><input type="range" id="sLogFade" min="0.1" max="2" step="0.1" value="0.4"><span class="s-val" id="sLogFadeVal">0.4s</span></div>
+            <div class="s-row"><label>Timestamps</label><select id="sLogTime"><option value="1">On</option><option value="0">Off</option></select></div>
+            <div class="s-row"><label>Max messages</label><input type="range" id="sLogMax" min="20" max="200" step="10" value="60"><span class="s-val" id="sLogMaxVal">60</span></div>
+            <br>
+            <div style="display:flex;gap:10px;justify-content:flex-end">
+                <button class="s-btn" id="sReset">Reset defaults</button>
+                <button class="s-btn primary" id="sApply">Apply &amp; close</button>
+            </div>
+        </div>
     </div>
     <div id="controls">
         <div class="joystick-area" id="joystick"></div>
@@ -397,6 +440,12 @@ def draw():
             if(e.key==='Escape')e.target.blur();
             return;
         }
+        if(document.getElementById('settingsOverlay').classList.contains('open')){
+            // Settings are modal: Esc closes, all other keys are ignored.
+            if(e.key==='Escape') closeSettings();
+            e.preventDefault();
+            return;
+        }
         if(e.key==='t'||e.key==='T'){ const ci=document.getElementById('chatInput'); if(ci)ci.focus(); e.preventDefault(); return; }
         if(e.key==='r'||e.key==='R'){ doRestart(); return; }
         if(e.key==='v'||e.key==='V'){ setPvpMode(!pvpMode); return; }
@@ -414,15 +463,84 @@ def draw():
     // ── Inline chat / log (issue #37) ─────────────────────────────────────
     // On-screen log fed by server-authored "game_event" messages (join/leave/
     // death/chat) plus local single-player events. Rendered inline in the
-    // game view; fades out after inactivity and reappears on activity.
-    // See game-log.js for the LogBuffer / InlineChatUI implementation.
+    // game view; fades out after a configurable period of inactivity and
+    // reappears on activity. See game-log.js for the LogBuffer / InlineChatUI
+    // implementation.
+    const LOG_DEFAULTS = { maxMessages: 60, showTimestamps: true, autoHide: true, inactivityTimeout: 6000, fadeMs: 400 };
+    let logMaxMessages = LOG_DEFAULTS.maxMessages, logShowTimestamps = LOG_DEFAULTS.showTimestamps,
+        logAutoHide = LOG_DEFAULTS.autoHide, logInactivityTimeout = LOG_DEFAULTS.inactivityTimeout,
+        logFadeMs = LOG_DEFAULTS.fadeMs;
+    let paused = false;
     const gameLog = GameLog.createInlineUI({
-        maxMessages: 60, showTimestamps: true, myId: MY_ID,
-        autoHide: true, inactivityTimeout: 6000, fadeInMs: 400, fadeOutMs: 400,
+        maxMessages: logMaxMessages,
+        showTimestamps: logShowTimestamps,
+        myId: MY_ID,
+        autoHide: logAutoHide,
+        inactivityTimeout: logInactivityTimeout,
+        fadeInMs: logFadeMs,
+        fadeOutMs: logFadeMs,
         rootEl: document.getElementById('inlineChat'),
         listEl: document.getElementById('inlineChatList'),
         inputEl: document.getElementById('chatInput'),
     });
+    function applyLogSettings(){
+        gameLog.setMaxMessages(logMaxMessages);
+        gameLog.setShowTimestamps(logShowTimestamps);
+        gameLog.setAutoHide(logAutoHide);
+        gameLog.setInactivityTimeout(logInactivityTimeout);
+        gameLog.setFadeDurations(logFadeMs, logFadeMs);
+    }
+    applyLogSettings();
+    function syncSettingsUI(){
+        document.getElementById('sLogAutoHide').value=logAutoHide?'1':'0';
+        document.getElementById('sLogTimeout').value=Math.round(logInactivityTimeout/1000);
+        document.getElementById('sLogTimeoutVal').textContent=Math.round(logInactivityTimeout/1000)+'s';
+        document.getElementById('sLogFade').value=(logFadeMs/1000).toFixed(1);
+        document.getElementById('sLogFadeVal').textContent=(logFadeMs/1000).toFixed(1)+'s';
+        document.getElementById('sLogTime').value=logShowTimestamps?'1':'0';
+        document.getElementById('sLogMax').value=logMaxMessages;
+        document.getElementById('sLogMaxVal').textContent=logMaxMessages;
+    }
+    function openSettings(){
+        paused = true;
+        // Drop focus from the chat input so keys don't land in the box
+        // behind the modal (issue #37).
+        const ci = document.getElementById('chatInput');
+        if (ci && document.activeElement === ci) ci.blur();
+        syncSettingsUI();
+        document.getElementById('settingsOverlay').classList.add('open');
+    }
+    function closeSettings(){
+        document.getElementById('settingsOverlay').classList.remove('open');
+        paused = false;
+    }
+    function applySettings(){
+        logAutoHide          = document.getElementById('sLogAutoHide').value==='1';
+        logInactivityTimeout = parseInt(document.getElementById('sLogTimeout').value,10)*1000;
+        logFadeMs            = Math.round(parseFloat(document.getElementById('sLogFade').value)*1000);
+        logShowTimestamps    = document.getElementById('sLogTime').value==='1';
+        logMaxMessages       = parseInt(document.getElementById('sLogMax').value,10);
+        applyLogSettings();
+        closeSettings();
+    }
+    function resetDefaults(){
+        logAutoHide=LOG_DEFAULTS.autoHide; logInactivityTimeout=LOG_DEFAULTS.inactivityTimeout;
+        logFadeMs=LOG_DEFAULTS.fadeMs; logShowTimestamps=LOG_DEFAULTS.showTimestamps;
+        logMaxMessages=LOG_DEFAULTS.maxMessages;
+        applyLogSettings();
+        openSettings();
+    }
+    document.getElementById('settingsBtn').addEventListener('click', openSettings);
+    document.getElementById('settingsClose').addEventListener('click', closeSettings);
+    document.getElementById('sApply').addEventListener('click', applySettings);
+    document.getElementById('sReset').addEventListener('click', resetDefaults);
+    document.getElementById('settingsOverlay').addEventListener('click', e=>{
+        if(e.target === document.getElementById('settingsOverlay')) closeSettings();
+    });
+    const sliderSync=(id,vid,fmt)=>{const e=document.getElementById(id),v=document.getElementById(vid);e.addEventListener('input',()=>v.textContent=fmt(e.value));};
+    sliderSync('sLogTimeout','sLogTimeoutVal',v=>v+'s');
+    sliderSync('sLogFade','sLogFadeVal',v=>parseFloat(v).toFixed(1)+'s');
+    sliderSync('sLogMax','sLogMaxVal',v=>v);
     const chatInputEl = document.getElementById('chatInput');
     chatInputEl.addEventListener('keydown', e => {
         if(e.key === 'Enter'){
@@ -739,6 +857,7 @@ def draw():
     let last=Date.now();
     let rAFLast=0;
     let lastDead=false;   // for logging local single-player deaths once
+    let lastState=null;   // cached render state, re-sent while the settings pause
     function loop() {
         requestAnimationFrame(loop);
         rAFLast=Date.now();
@@ -747,6 +866,15 @@ def draw():
     function frameTick() {
         const now=Date.now(), dt=Math.min((now-last)/1000,0.05); last=now;
 
+        // While the settings overlay is open the game is paused: the world
+        // stays frozen (pyUpdate is skipped) but the last frame is still
+        // re-rendered and our frozen network state keeps flowing so remote
+        // clients don't prune us mid-settings.
+        if (paused) {
+            if (lastState) sendNetState(dt, lastState);
+            return;
+        }
+
         pySetKey('left',  touch.left<-0.5);
         pySetKey('right', touch.left>0.5);
         pySetKey('up',    touch.thrust);
@@ -754,6 +882,7 @@ def draw():
 
         pyUpdate(dt);
         const st = pyDraw().toJs({ dict_converter: Object.fromEntries });
+        lastState = st;
 
         // Log local (single-player / offline) deaths once each time we die.
         if (st.dead && !lastDead && !(pvpMode && ws && ws.readyState === WebSocket.OPEN)) onLocalDeath();

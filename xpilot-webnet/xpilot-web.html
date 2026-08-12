@@ -2139,6 +2139,9 @@ function closeMenu(){
 // ── Settings ───────────────────────────────────────────────────────────────
 function openSettings(){
     if(!paused){openPause();pausedBySettings=true;}
+    // Drop focus from the chat input so keys don't land in the box
+    // behind the modal.
+    if(chatInputEl && document.activeElement===chatInputEl) chatInputEl.blur();
     document.getElementById('sTurnMode').value=turnMode;
     document.getElementById('sSens').value=sensitivity; document.getElementById('sSensVal').textContent=sensitivity.toFixed(1);
     document.getElementById('sZoom').value=zoomLevel;   document.getElementById('sZoomVal').textContent=zoomLevel.toFixed(2)+'×';
@@ -2199,6 +2202,7 @@ document.getElementById('pmResume').addEventListener('click',closePause);
 document.getElementById('pmMenu').addEventListener('click',()=>{closePause();openMenu();});
 document.getElementById('pmSettings').addEventListener('click',()=>{
     pausedBySettings=false;
+    if(chatInputEl && document.activeElement===chatInputEl) chatInputEl.blur();
     document.getElementById('sTurnMode').value=turnMode;
     document.getElementById('sSens').value=sensitivity; document.getElementById('sSensVal').textContent=sensitivity.toFixed(1);
     document.getElementById('sZoom').value=zoomLevel;   document.getElementById('sZoomVal').textContent=zoomLevel.toFixed(2)+'×';

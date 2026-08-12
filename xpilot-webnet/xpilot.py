@@ -27,13 +27,17 @@ net_log = get_logger("Network")
 WIDTH, HEIGHT = 800, 600
 FPS = 60
 
-# In-game chat/log (issue #32): the desktop client shows a small on-screen
-# log of deaths (who died / who killed whom). Remote players are identified
-# by their short connection id because the UDP relay has no name exchange.
+# In-game chat/log (issue #32, #37): the desktop client shows an inline log of
+# deaths (who died / who killed whom). Remote players are identified by their
+# short connection id because the UDP relay has no name exchange. Per issue
+# #37 the log is drawn inline (no box) with a text shadow and fades out after
+# a configurable period of inactivity, reappearing whenever a new entry lands.
 LOG_COLOR_SELF = (255, 120, 120)
 LOG_COLOR_DEATH = (255, 190, 150)
 LOG_COLOR_JOIN = (127, 220, 143)
-LOG_LIFETIME = 12.0
+LOG_LIFETIME = 12.0            # seconds each entry stays in the buffer
+LOG_INACTIVITY_TIMEOUT = 6.0   # inactivity before the overlay fades out
+LOG_FADE_TIME = 0.4            # fade in/out duration in seconds
 LOG_MAX_ENTRIES = 40
 LOG_MAX_RENDER = 6
 
@@ -43,6 +47,16 @@ def _short_id(cid):
 
 
 class Player:
+    x: float
+    y: float
+    vx: float
+    vy: float
+    angle: float
+    thrust: float
+    dead: bool
+    hp: int
+    max_hp: int
+
     def __init__(self, x, y):
         self.x = x
         self.y = y
@@ -107,6 +121,12 @@ class Bullet:
 
 
 class Enemy:
+    x: float
+    y: float
+    vx: float
+    vy: float
+    r: float
+
     def __init__(self, x=None, y=None, vx=None, vy=None, r=None):
         if x is None:
             self.x = random.uniform(0, WIDTH)
@@ -116,6 +136,7 @@ class Enemy:
             self.vy = math.sin(ang) * random.uniform(20, 80)
             self.r = random.randint(10, 26)
         else:
+            assert y is not None and vx is not None and vy is not None and r is not None
             self.x = x
             self.y = y
             self.vx = vx
@@ -135,9 +156,69 @@ class Enemy:
         return {'x': self.x, 'y': self.y, 'vx': self.vx, 'vy': self.vy, 'r': self.r}
 
 
+class LogOverlay:
+    """Thread-safe in-game log buffer with auto-hide/fade (issues #32, #37).
+
+    Holds newest-first [{text, color, t}] entries and animates the overlay
+    opacity from a configurable inactivity window: it fades back in the
+    moment a new entry lands and fades out after `inactivity` seconds pass
+    without one. `add()` is safe to call from the network thread; `tick()`
+    runs in the main loop.
+    """
+
+    def __init__(self, opts=None):
+        opts = opts or {}
+        self.lifetime = float(opts.get('lifetime', LOG_LIFETIME))
+        self.inactivity = float(opts.get('inactivity', LOG_INACTIVITY_TIMEOUT))
+        self.fade = float(opts.get('fade', LOG_FADE_TIME))
+        self.max_entries = int(opts.get('max_entries', LOG_MAX_ENTRIES))
+        self.always_visible = bool(opts.get('always_visible', False))
+        self.game_log = []       # newest first: [{text, color, t}]
+        self.lock = threading.Lock()
+        self.activity = 0.0      # time left before the overlay fades out
+        self.opacity = 0.0       # current overlay opacity in [0, 1]
+        self.visible = False     # whether the overlay is in the "shown" state
+
+    def add(self, text, color):
+        """Add an entry and wake the overlay so it fades back in."""
+        with self.lock:
+            self.game_log.insert(0, {'text': text, 'color': color, 't': self.lifetime})
+            if len(self.game_log) > self.max_entries:
+                del self.game_log[self.max_entries:]
+            self.activity = self.inactivity
+            self.visible = True
+            if self.always_visible:
+                self.opacity = 1.0
+
+    def tick(self, dt):
+        """Age/remove expired entries and drive the overlay's fade in/out."""
+        with self.lock:
+            for e in self.game_log:
+                e['t'] -= dt
+            self.game_log = [e for e in self.game_log if e['t'] > 0]
+            self._tick_fade(dt)
+
+    def _tick_fade(self, dt):
+        """Animate opacity toward 1 (recent activity) or 0 (idle)."""
+        if self.always_visible:
+            self.visible = True
+            self.opacity = 1.0
+            return
+        if self.activity > 0:
+            self.activity -= dt
+        # The inactivity window expired in this tick: start the fade-out now.
+        self.visible = self.activity > 0
+        target = 1.0 if self.visible else 0.0
+        step = dt / max(self.fade, 1e-4)
+        if self.opacity < target:
+            self.opacity = min(target, self.opacity + step)
+        elif self.opacity > target:
+            self.opacity = max(target, self.opacity - step)
+
+
 class NetworkClient:
     """Simple UDP relay client with enemy sync and PvP. Lowest ID client is host."""
-    def __init__(self, server_host, server_port, player_ref, bullets_ref, others_ref, enemies_ref):
+    def __init__(self, server_host, server_port, player_ref, bullets_ref, others_ref, enemies_ref, log_opts=None, log_overlay=None):
         self.server = (server_host, server_port)
         self.player = player_ref
         self.bullets = bullets_ref
@@ -158,25 +239,101 @@ class NetworkClient:
         self.pvp_mode = False
         self.players_hp = {}     # host-authoritative {id: {hp,maxHp,dead}}
         self.ram_cooldowns = {}  # {remoteId: timeLeft} to avoid repeated ram damage
-        # ── In-game chat/log (issue #32) ──────────────────────────────────
-        self.game_log = []       # newest first: [{text, color, t}]
-        self.log_lock = threading.Lock()
+        # ── In-game chat/log (issues #32, #37) ────────────────────────────
+        # `game_log` holds newest-first [{text, color, t}] entries. The
+        # overlay fades out after `inactivity` seconds without a new entry
+        # and fades back in the moment one arrives (issue #37). An external
+        # LogOverlay may be shared (so the offline single-player log and the
+        # networked log are the same buffer); otherwise we own a private one.
+        self.log_overlay = log_overlay if log_overlay is not None else LogOverlay(log_opts)
         self.last_death_killer = ''  # set by the PvP handlers so the main
                                      # loop can log "you were killed by X"
 
     def add_log(self, text, color):
-        """Add an in-game log entry (safe to call from any thread)."""
-        with self.log_lock:
-            self.game_log.insert(0, {'text': text, 'color': color, 't': LOG_LIFETIME})
-            if len(self.game_log) > LOG_MAX_ENTRIES:
-                del self.game_log[LOG_MAX_ENTRIES:]
+        """Add an in-game log entry (safe to call from any thread) and wake
+        the overlay up so it fades back in and stays until idle again."""
+        self.log_overlay.add(text, color)
 
     def tick_log(self, dt):
-        """Age/remove expired log entries."""
-        with self.log_lock:
-            for e in self.game_log:
-                e['t'] -= dt
-            self.game_log = [e for e in self.game_log if e['t'] > 0]
+        """Age/remove expired entries and drive the overlay's fade in/out."""
+        self.log_overlay.tick(dt)
+
+    # ── Log accessors (delegate to the shared LogOverlay) ─────────────────
+    @property
+    def game_log(self):
+        return self.log_overlay.game_log
+
+    @game_log.setter
+    def game_log(self, value):
+        self.log_overlay.game_log = value
+
+    @property
+    def log_lock(self):
+        return self.log_overlay.lock
+
+    @property
+    def log_lifetime(self):
+        return self.log_overlay.lifetime
+
+    @log_lifetime.setter
+    def log_lifetime(self, value):
+        self.log_overlay.lifetime = value
+
+    @property
+    def log_inactivity(self):
+        return self.log_overlay.inactivity
+
+    @log_inactivity.setter
+    def log_inactivity(self, value):
+        self.log_overlay.inactivity = value
+
+    @property
+    def log_fade(self):
+        return self.log_overlay.fade
+
+    @log_fade.setter
+    def log_fade(self, value):
+        self.log_overlay.fade = value
+
+    @property
+    def log_max_entries(self):
+        return self.log_overlay.max_entries
+
+    @log_max_entries.setter
+    def log_max_entries(self, value):
+        self.log_overlay.max_entries = value
+
+    @property
+    def log_always_visible(self):
+        return self.log_overlay.always_visible
+
+    @log_always_visible.setter
+    def log_always_visible(self, value):
+        self.log_overlay.always_visible = value
+
+    @property
+    def log_activity(self):
+        return self.log_overlay.activity
+
+    @log_activity.setter
+    def log_activity(self, value):
+        self.log_overlay.activity = value
+
+    @property
+    def log_opacity(self):
+        return self.log_overlay.opacity
+
+    @log_opacity.setter
+    def log_opacity(self, value):
+        self.log_overlay.opacity = value
+
+    @property
+    def log_visible(self):
+        return self.log_overlay.visible
+
+    @log_visible.setter
+    def log_visible(self, value):
+        self.log_overlay.visible = value
 
     def _listen(self):
         while self.running:
@@ -393,24 +550,33 @@ class NetworkClient:
             pass
 
 
-def draw_game_log(screen, log_font, entries):
-    """Render the in-game death log (issue #32) in the bottom-left corner."""
-    if not entries:
+def draw_game_log(screen, log_font, entries, opacity):
+    """Render the inline auto-hiding log (issue #37) bottom-left.
+
+    No box: each line is drawn with a dark text shadow so it stays readable
+    over any map or background. The whole overlay fades in/out with `opacity`
+    in [0, 1], which the NetworkClient animates from the inactivity timer.
+    """
+    if not entries or opacity <= 0:
         return
     line_h = 19
     n = min(len(entries), LOG_MAX_RENDER)
-    box_w = min(360, WIDTH - 16)
-    box_h = n * line_h + 8
-    box = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
-    box.fill((8, 8, 22, 180))
-    screen.blit(box, (8, HEIGHT - 8 - box_h))
+    alpha = max(0, min(255, int(opacity * 255)))
+    base_y = HEIGHT - 8 - n * line_h
     for i in range(n):
         ent = entries[i]
+        y = base_y + i * line_h
+        shadow = log_font.render(ent['text'], True, (0, 0, 0))
+        shadow.set_alpha(alpha)
+        for ox, oy in ((-1, -1), (-1, 0), (-1, 1), (0, -1),
+                       (0, 1), (1, -1), (1, 0), (1, 1)):
+            screen.blit(shadow, (12 + ox, y + oy))
         surf = log_font.render(ent['text'], True, ent['color'])
-        screen.blit(surf, (14, HEIGHT - 8 - box_h + 6 + i * line_h))
+        surf.set_alpha(alpha)
+        screen.blit(surf, (12, y))
 
 
-def main(server_host=None, server_port=50000):
+def main(server_host=None, server_port=50000, log_opts=None):
     log.info("Game starting")
 
     pygame.init()
@@ -426,10 +592,13 @@ def main(server_host=None, server_port=50000):
     shoot_cool = 0.0
 
     remote_players = {}
+    # In-game death log (issues #32/#37): shared by the offline single-player
+    # mode and the networked client (which feeds join/death/kill events in).
+    log_overlay = LogOverlay(log_opts)
     netclient = None
     if server_host:
         try:
-            netclient = NetworkClient(server_host, server_port, player, bullets, remote_players, enemies)
+            netclient = NetworkClient(server_host, server_port, player, bullets, remote_players, enemies, log_opts=log_opts, log_overlay=log_overlay)
             net_log.info(f"Connected to server {server_host}:{server_port} (id={netclient.id})")
         except Exception as e:
             net_log.error(f"Network disabled: {e}")
@@ -550,19 +719,21 @@ def main(server_host=None, server_port=50000):
 
         if player.dead and not prev_dead:
             log.warning("Player died!")
-            # In-game log (issue #32): the PvP handlers record the killer via
-            # last_death_killer; everything else is a plain "you died".
+            # In-game log (issues #32/#37): the PvP handlers record the killer
+            # via last_death_killer; everything else is a plain "you died".
+            killer = ''
             if netclient:
                 killer = netclient.last_death_killer or ''
                 netclient.last_death_killer = ''
-                netclient.add_log(
-                    f"You were destroyed by {_short_id(killer)}" if killer else "You died",
-                    LOG_COLOR_SELF,
-                )
+            log_overlay.add(
+                f"You were destroyed by {_short_id(killer)}" if killer else "You died",
+                LOG_COLOR_SELF,
+            )
         prev_dead = player.dead
 
         if netclient:
             netclient.tick_log(dt)
+        log_overlay.tick(dt)
 
         if score != prev_score:
             log.info(f"Score: {score}")
@@ -614,10 +785,11 @@ def main(server_host=None, server_port=50000):
             if netclient.pvp_mode:
                 hud3 = font.render(f"HP: {max(0, player.hp)}/{player.max_hp}", True, (230, 170, 170))
                 screen.blit(hud3, (8, 52))
-            # In-game death log (issue #32)
-            with netclient.log_lock:
-                log_entries = list(netclient.game_log)
-            draw_game_log(screen, log_font, log_entries)
+        # In-game death log (issues #32/#37): inline, auto-fading. Shown in
+        # both networked and offline single-player modes.
+        with log_overlay.lock:
+            log_entries = list(log_overlay.game_log)
+        draw_game_log(screen, log_font, log_entries, log_overlay.opacity)
 
         pygame.display.flip()
 
@@ -643,7 +815,35 @@ if __name__ == "__main__":
         help="Instead of hosting a log listener, push all log entries to a "
              "central log server at HOST:PORT (e.g. 127.0.0.1:9000)",
     )
+    parser.add_argument(
+        "--log-lifetime", type=float, default=LOG_LIFETIME,
+        help="seconds each in-game log entry stays in the buffer (default: 12)",
+    )
+    parser.add_argument(
+        "--log-inactivity", type=float, default=LOG_INACTIVITY_TIMEOUT,
+        help="seconds without new activity before the in-game log fades out "
+             "(default: 6)",
+    )
+    parser.add_argument(
+        "--log-fade", type=float, default=LOG_FADE_TIME,
+        help="in-game log fade in/out duration in seconds (default: 0.4)",
+    )
+    parser.add_argument(
+        "--log-max-entries", type=int, default=LOG_MAX_ENTRIES,
+        help="max in-game log entries to keep (default: 40)",
+    )
+    parser.add_argument(
+        "--log-always-visible", action="store_true",
+        help="keep the in-game log overlay permanently visible (no auto-hide)",
+    )
     args = parser.parse_args()
+    log_opts = {
+        'lifetime': args.log_lifetime,
+        'inactivity': args.log_inactivity,
+        'fade': args.log_fade,
+        'max_entries': args.log_max_entries,
+        'always_visible': args.log_always_visible,
+    }
     set_log_level(args.log_level)
     if args.log_forward:
         fwd_host, fwd_port = parse_forward_address(args.log_forward)
@@ -651,7 +851,7 @@ if __name__ == "__main__":
     else:
         start_log_server(port=args.log_port)
     try:
-        main(args.server, args.port)
+        main(args.server, args.port, log_opts=log_opts)
     except KeyboardInterrupt:
         log.info("Game shutting down")
         pygame.quit()

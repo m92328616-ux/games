@@ -367,10 +367,24 @@ what's happening beyond your own ship:
 
 ### Desktop (`xpilot.py`)
 
-A small semi-transparent log appears bottom-left showing the last few
-events (deaths, joins, self-deaths). It's informational only — no chat
-input, since the UDP relay has no name/chat protocol. Entries fade out
-after ~12 seconds; the buffer holds up to 40 entries.
+An inline log appears bottom-left showing the last few events (deaths,
+joins, self-deaths). It's informational only — no chat input, since the UDP
+relay has no name/chat protocol. Per issue #37 there is **no box**: each
+line is drawn with a text shadow so it stays readable over any background,
+and the whole overlay **fades out after a period of inactivity** (default
+6 s), fading right back in the moment a new event arrives. Entries leave
+the buffer after ~12 seconds; it holds up to 40 entries. The log is shown
+in both networked and offline single-player mode (which logs "You died").
+
+The behavior is configurable from the command line:
+
+- `--log-inactivity N` — seconds without new activity before the overlay
+  fades out (default 6).
+- `--log-fade N` — fade in/out duration in seconds (default 0.4).
+- `--log-lifetime N` — seconds each entry stays in the buffer (default 12).
+- `--log-max-entries N` — max entries to keep (default 40).
+- `--log-always-visible` — keep the overlay permanently visible (no
+  auto-hide).
 
 ### Web versions (`xpilot-web.html`, `xpilot-pyodide.html`)
 
