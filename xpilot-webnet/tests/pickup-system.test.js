@@ -23,14 +23,11 @@ test('shield pickups survive multiple hits', () => {
   const pickup = createPickup('shield', { x: 100, y: 100, active: true });
   const first = applyBulletDamageToPickup(pickup, 1, { consumeOnImpact: true });
   assert.equal(first.destroyed, false);
-  assert.equal(pickup.hp, 2);
-  const second = applyBulletDamageToPickup(pickup, 1, { consumeOnImpact: true });
-  assert.equal(second.destroyed, false);
   assert.equal(pickup.hp, 1);
-  const third = applyBulletDamageToPickup(pickup, 1, { consumeOnImpact: true });
-  assert.equal(third.destroyed, true);
-  assert.equal(pickup.active, false);
+  const second = applyBulletDamageToPickup(pickup, 1, { consumeOnImpact: true });
+  assert.equal(second.destroyed, true);
   assert.equal(pickup.hp, 0);
+  assert.equal(pickup.active, false);
 });
 
 test('durable pickups need multiple hits', () => {

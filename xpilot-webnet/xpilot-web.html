@@ -414,16 +414,19 @@ const N_FUEL_CELLS=7;
 
 // ── Permanent upgrades (bought with score) ─────────────────────────────────
 const UPGRADES=[
-    {id:'rapid',      icon:'🔫', name:'Rapid Fire',     desc:'Fire rate ×3',              price:100},
-    {id:'triple',     icon:'🔱', name:'Triple Shot',    desc:'3 bullets per shot',          price:200},
-    {id:'big_bullet', icon:'💥', name:'Big Bullets',    desc:'Bullets 3× larger, ×2 dmg',  price:350},
-    {id:'homing',     icon:'🎯', name:'Homing Bullets', desc:'Bullets seek nearest enemy',  price:500},
-    {id:'laser',      icon:'🔴', name:'Laser',          desc:'Continuous beam while firing',price:750},
+    {id:'rapid',      icon:'🔫', name:'Rapid Fire',     desc:'Fire rate ×1.8',            price:120},
+    {id:'triple',     icon:'🔱', name:'Triple Shot',    desc:'2 bullets per shot',        price:180},
+    {id:'big_bullet', icon:'💥', name:'Big Bullets',    desc:'Bullets 1.5× larger, ×1.5 dmg', price:280},
+    {id:'homing',     icon:'🎯', name:'Homing Bullets', desc:'Bullets seek nearest enemy', price:420},
+    {id:'laser',      icon:'🔴', name:'Laser',          desc:'Beam while firing, lower DPS', price:540},
 ];
 let ownedUpgrades=new Set();
+let activeUpgrade=null;
+function isUpgradeOwned(id){ return ownedUpgrades.has(id); }
+function isUpgradeActive(id){ return activeUpgrade===id; }
 
 // ── Laser state ────────────────────────────────────────────────────────────
-const LASER_RANGE=420, LASER_DPS=10;
+const LASER_RANGE=420, LASER_DPS=7;
 let laserActive=false, laserEndX=0, laserEndY=0;
 
 // ── Multiplayer ────────────────────────────────────────────────────────────
@@ -741,12 +744,13 @@ function absorbShieldHit(dmg){
     return true;
 }
 
-// ── Derived stats (bullet upgrades now from ownedUpgrades) ─────────────────
-function effectiveShootCool(){return ownedUpgrades.has('rapid')?SHOOT_COOL_BASE/3:SHOOT_COOL_BASE;}
-function effectiveBulletR()  {return ownedUpgrades.has('big_bullet')?9:3;}
-function effectiveBulletDmg(){return ownedUpgrades.has('big_bullet')?2:1;}
-function bulletCount()       {return ownedUpgrades.has('triple')?3:1;}
+// ── Derived stats (bullet upgrades now from the equipped upgrade) ───────
+function effectiveShootCool(){return isUpgradeActive('rapid')?SHOOT_COOL_BASE/1.8:SHOOT_COOL_BASE;}
+function effectiveBulletR()  {return isUpgradeActive('big_bullet')?6:3;}
+function effectiveBulletDmg(){return isUpgradeActive('big_bullet')?1.5:1;}
+function bulletCount()       {return isUpgradeActive('triple')?2:1;}
 function scoreMultiplier()   {return hasEffect('score_mult')?2:1;}
+function hasHomingShot()     {return isUpgradeActive('homing');}
 
 // ── Toast notifications ────────────────────────────────────────────────────
 let toasts=[];
@@ -869,7 +873,7 @@ function initGame(){
     // ensure host initializes its hp record for PvP
     if(pvpMode && isHost) playersHP[MY_ID] = PvPSystem.createPlayerHPState();
     playerBullets=[]; enemyBullets=[]; score=0; shootCool=0; activeEffects={}; shieldHp=0;
-    ownedUpgrades=new Set(); laserActive=false;
+    ownedUpgrades=new Set(); activeUpgrade=null; laserActive=false;
     entities=[];
     for(let i=0;i<N_CIRCLES;i++) entities.push(mkCircle());
     for(let i=0;i<N_SHOOTERS;i++) entities.push(mkShooter());
@@ -1398,7 +1402,7 @@ function update(dt){
                 const ba=player.angle+(s-Math.floor(cnt/2))*spread;
                 const b={x:player.x+Math.cos(player.angle)*16,y:player.y+Math.sin(player.angle)*16,
                     vx:player.vx+Math.cos(ba)*BULLET_SPEED,vy:player.vy+Math.sin(ba)*BULLET_SPEED,
-                    life:2.2,homing:ownedUpgrades.has('homing'),r:effectiveBulletR(),dmg:effectiveBulletDmg()};
+                    life:2.2,homing:hasHomingShot(),r:effectiveBulletR(),dmg:effectiveBulletDmg()};
                 playerBullets.push(b);
                 if(s===0)sendNetShoot(b);
             }
@@ -1406,7 +1410,7 @@ function update(dt){
     }
 
     // — Laser —
-    if(shooting&&ownedUpgrades.has('laser')){
+    if(shooting&&isUpgradeActive('laser')){
         laserActive=true;
         const lx1=player.x+Math.cos(player.angle)*15, ly1=player.y+Math.sin(player.angle)*15;
         const lx2=lx1+Math.cos(player.angle)*LASER_RANGE, ly2=ly1+Math.sin(player.angle)*LASER_RANGE;
@@ -2117,16 +2121,23 @@ function updateShopUI(){
     document.getElementById('mName').value=myName;
     for(const upg of UPGRADES){
         const btn=document.getElementById('upg-btn-'+upg.id); if(!btn)continue;
-        if(ownedUpgrades.has(upg.id)){btn.textContent='✓ Owned';btn.className='upg-buy owned';btn.disabled=true;}
+        if(isUpgradeActive(upg.id)){btn.textContent='✓ Equipped';btn.className='upg-buy owned';btn.disabled=false;}
+        else if(isUpgradeOwned(upg.id)){btn.textContent='Equip';btn.className='upg-buy owned';btn.disabled=false;}
         else if(score>=upg.price){btn.textContent='Buy';btn.className='upg-buy';btn.disabled=false;}
         else{btn.textContent='Buy';btn.className='upg-buy';btn.disabled=true;}
     }
 }
 function buyUpgrade(id){
     const upg=UPGRADES.find(u=>u.id===id);
-    if(!upg||ownedUpgrades.has(id)||score<upg.price)return;
-    score-=upg.price; ownedUpgrades.add(id);
-    showToast(upg.icon+' '+upg.name+' unlocked!','#a0d0ff');
+    if(!upg)return;
+    if(!isUpgradeOwned(id)){
+        if(score < upg.price) return;
+        score -= upg.price;
+        ownedUpgrades.add(id);
+        showToast(upg.icon+' '+upg.name+' unlocked!','#a0d0ff');
+    }
+    activeUpgrade = id;
+    showToast(upg.icon+' '+upg.name+' equipped!','#a0d0ff');
     updateShopUI();
 }
 function openMenu(){
