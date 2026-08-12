@@ -403,14 +403,14 @@ const N_CIRCLES=14, N_SHOOTERS=10, N_TANKS=10;
 
 // ── Pickups (temporary effects + fuel cells) ─────────────────────────────
 const POWERUP_DEFS={
-    shield:     {...PickupSystem.PICKUP_DEFS.shield, label:'🛡 Shield',    color:'#4488ff',bg:'rgba(30,60,200,0.25)', duration:45},
-    score_mult: {...PickupSystem.PICKUP_DEFS.score_mult, label:'🌟 2× Score',  color:'#ffcc00',bg:'rgba(180,140,0,0.25)', duration:20},
+    shield:     {...PickupSystem.PICKUP_DEFS.shield, label:'🛡 Shield',    color:'#4488ff',bg:'rgba(30,60,200,0.25)', duration:30},
+    score_mult: {...PickupSystem.PICKUP_DEFS.score_mult, label:'🌟 2× Score',  color:'#ffcc00',bg:'rgba(180,140,0,0.25)', duration:18},
     fuel_cell:  {...PickupSystem.PICKUP_DEFS.fuel_cell, label:'⛽ Fuel Cell', color:'#7ef0a0',bg:'rgba(40,180,120,0.25)'}
 };
 const POWERUP_KINDS=Object.keys(POWERUP_DEFS);
 const N_CUBES=80;
-const N_SHIELD_CUBES=4;
-const N_FUEL_CELLS=8;
+const N_SHIELD_CUBES=5;
+const N_FUEL_CELLS=7;
 
 // ── Permanent upgrades (bought with score) ─────────────────────────────────
 const UPGRADES=[

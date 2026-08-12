@@ -1,6 +1,14 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { createPickup, applyBulletDamageToPickup, getPickupRespawnKind, getPickupBlastRadius, getPickupExplosionDelay, FUEL_CELL_BLAST_RADIUS, monitorFuelExplosion } = require('../pickup-system.js');
+const { PICKUP_DEFS, createPickup, applyBulletDamageToPickup, getPickupRespawnKind, getPickupBlastRadius, getPickupExplosionDelay, FUEL_CELL_BLAST_RADIUS, monitorFuelExplosion } = require('../pickup-system.js');
+
+test('power-up balancing keeps shields and score boosts in a fair range', () => {
+  assert.equal(PICKUP_DEFS.shield.duration, 30);
+  assert.equal(PICKUP_DEFS.shield.hp, 2);
+  assert.equal(PICKUP_DEFS.score_mult.duration, 18);
+  assert.equal(PICKUP_DEFS.score_mult.respawn, 15);
+  assert.equal(PICKUP_DEFS.fuel_cell.respawn, 24);
+});
 
 test('fragile pickups are destroyed in one hit', () => {
   const pickup = createPickup('score_mult', { x: 100, y: 100, active: true });

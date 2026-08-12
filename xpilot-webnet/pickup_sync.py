@@ -44,8 +44,8 @@ EDGE = 80
 PICKUP_DEFS = {
     "shield": {
         "r": 10,
-        "hp": 3,
-        "respawn": 18,
+        "hp": 2,
+        "respawn": 16,
         "blastRadius": 0,
         "respawnKind": None,
         "explosionDelay": 0,
@@ -53,7 +53,7 @@ PICKUP_DEFS = {
     "score_mult": {
         "r": 10,
         "hp": 1,
-        "respawn": 18,
+        "respawn": 15,
         "blastRadius": 0,
         "respawnKind": None,
         "explosionDelay": 0,
@@ -61,7 +61,7 @@ PICKUP_DEFS = {
     "fuel_cell": {
         "r": 12,
         "hp": 3,
-        "respawn": 22,
+        "respawn": 24,
         "blastRadius": 90,
         "respawnKind": "fuel_cell",
         "explosionDelay": 1.4,
@@ -70,8 +70,8 @@ PICKUP_DEFS = {
 PICKUP_KINDS = list(PICKUP_DEFS.keys())
 
 N_CUBES = 80
-N_SHIELD_CUBES = 4
-N_FUEL_CELLS = 8
+N_SHIELD_CUBES = 5
+N_FUEL_CELLS = 7
 
 # Collection respawn time range used by the client for picked-up cubes.
 COLLECT_RESPAWN_MIN = 18

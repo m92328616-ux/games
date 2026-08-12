@@ -145,13 +145,13 @@ class PickupSyncTest(unittest.TestCase):
             # Every client sees the exact same power-up set.
             self.assertEqual(snap_a["pickups"], snap_b["pickups"])
 
-            # Correct kind distribution: the fixed pools are 4 shield + 8
+            # Correct kind distribution: the fixed pools are 5 shield + 7
             # fuel_cell, and every random cube may itself be any kind.
             kinds = {}
             for p in snap_a["pickups"]:
                 kinds[p["kind"]] = kinds.get(p["kind"], 0) + 1
-            self.assertGreaterEqual(kinds["shield"], 4)
-            self.assertGreaterEqual(kinds["fuel_cell"], 8)
+            self.assertGreaterEqual(kinds["shield"], 5)
+            self.assertGreaterEqual(kinds["fuel_cell"], 7)
             self.assertEqual(sum(kinds.values()), 80)
 
             await a.close()
