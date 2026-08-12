@@ -153,6 +153,24 @@ test('formatTimestamp renders HH:MM:SS and tolerates bad input', () => {
   assert.strictEqual(formatTimestamp('not-a-date'), '');
 });
 
+test('invalid sequence values remain local events', () => {
+  const buf = new LogBuffer({ maxMessages: 10 });
+  buf.push({ event: 'chat', seq: 'not-a-sequence', id: 'a', name: 'A', text: 'hello' });
+  buf.push({ event: 'chat', seq: 1.5, id: 'a', name: 'A', text: 'world' });
+  assert.strictEqual(buf.count(), 2);
+  assert.deepStrictEqual(buf.rows.map((row) => row.seq), [null, null]);
+});
+
+test('history can start at a retained sequence after older events expire', () => {
+  const buf = new LogBuffer({ maxMessages: 10 });
+  buf.loadHistory([
+    { event: 'join', seq: 101, id: 'a', name: 'A' },
+    { event: 'chat', seq: 102, id: 'a', name: 'A', text: 'hello' },
+  ]);
+  buf.push({ event: 'chat', seq: 103, id: 'a', name: 'A', text: 'world' });
+  assert.deepStrictEqual(buf.rows.map((row) => row.seq), [101, 102, 103]);
+});
+
 // ── InlineChatController (auto-hide / fade, issue #37) ─────────────────
 // A minimal fake timer so the fade/inactivity state machine can be tested
 // deterministically without real wall-clock time.

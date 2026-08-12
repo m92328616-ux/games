@@ -755,7 +755,7 @@ function showToast(text,color='#fff'){
     el.className='toast'; el.textContent=text; el.style.color=color;
     el.style.borderColor=color+'55'; el.style.boxShadow=`0 0 12px ${color}44`;
     document.getElementById('toastStack').appendChild(el);
-    toasts.push({el,timeLeft:2.8});
+    toasts.push({el,timeLeft:3});
     if(toasts.length>4){const old=toasts.shift();old.el.remove();}
 }
 function tickToasts(dt){
@@ -786,7 +786,7 @@ function showKillFeed(killer, target){
 // is rendered inline in the game view and auto-fades after a configurable
 // period of inactivity, reappearing whenever new activity occurs. See
 // game-log.js for the LogBuffer / GameLogUI / InlineChatUI implementation.
-const LOG_DEFAULTS = { maxMessages: 60, showTimestamps: true, autoHide: true, inactivityTimeout: 6000, fadeMs: 400 };
+const LOG_DEFAULTS = { maxMessages: 60, showTimestamps: true, autoHide: true, inactivityTimeout: 3000, fadeMs: 400 };
 let logMaxMessages = LOG_DEFAULTS.maxMessages, logShowTimestamps = LOG_DEFAULTS.showTimestamps,
     logAutoHide = LOG_DEFAULTS.autoHide, logInactivityTimeout = LOG_DEFAULTS.inactivityTimeout,
     logFadeMs = LOG_DEFAULTS.fadeMs;
@@ -1186,6 +1186,10 @@ window.addEventListener('keydown',e=>{
         return;
     }
     if(e.key==='t'||e.key==='T'){
+        // The auto-hidden overlay uses display:none, so focus() alone cannot
+        // wake it. Show it before focusing to keep chat accessible after the
+        // inactivity timeout.
+        if(gameLog) gameLog.poke();
         if(chatInputEl){ chatInputEl.focus(); }
         e.preventDefault();
         return;

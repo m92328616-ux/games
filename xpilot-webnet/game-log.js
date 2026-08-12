@@ -32,10 +32,16 @@
     return Math.max(lo, Math.min(hi, Math.round(n)));
   }
 
+  function sequenceOf(ev) {
+    if (!ev || ev.seq == null) return null;
+    const seq = Number(ev.seq);
+    return Number.isSafeInteger(seq) && seq > 0 ? seq : null;
+  }
+
   function InlineChatController(opts) {
     opts = opts || {};
     this.autoHide = opts.autoHide !== false;
-    this.inactivityTimeout = clampInt(opts.inactivityTimeout, 1000, 60000, 6000);
+    this.inactivityTimeout = clampInt(opts.inactivityTimeout, 1000, 60000, 3000);
     this.fadeInMs = clampInt(opts.fadeInMs, 0, 3000, 250);
     this.fadeOutMs = clampInt(opts.fadeOutMs, 0, 5000, 700);
     this.onChange = typeof opts.onChange === 'function' ? opts.onChange : null;
@@ -53,7 +59,7 @@
   };
 
   InlineChatController.prototype._clearOne = function (name) {
-    if (this._timers[name]) {
+    if (Object.prototype.hasOwnProperty.call(this._timers, name)) {
       this._clearTimeout(this._timers[name]);
       delete this._timers[name];
     }
@@ -125,7 +131,7 @@
   };
 
   InlineChatController.prototype.setInactivityTimeout = function (ms) {
-    this.inactivityTimeout = clampInt(ms, 1000, 60000, 6000);
+    this.inactivityTimeout = clampInt(ms, 1000, 60000, 3000);
     this._scheduleHide();
   };
 
@@ -240,7 +246,7 @@
   // array when the event was buffered waiting for an out-of-order gap.
   LogBuffer.prototype.push = function (ev) {
     if (!ev || typeof ev !== 'object') return null;
-    const seq = ev.seq == null ? null : Number(ev.seq);
+    const seq = sequenceOf(ev);
 
     if (seq == null) {
       // Local/unsynchronised event: append in arrival order.
@@ -279,7 +285,7 @@
     if (!text) return null;
     const meta = eventMeta(ev.event || ev.kind);
     const row = {
-      seq: ev.seq == null ? null : Number(ev.seq),
+      seq: sequenceOf(ev),
       time: ev.time != null ? ev.time : Date.now(),
       text,
       color: meta.color,
@@ -297,11 +303,18 @@
     const added = [];
     if (!Array.isArray(events)) return added;
     const sorted = events
-      .filter((e) => e && e.seq != null)
-      .sort((a, b) => Number(a.seq) - Number(b.seq));
+      .filter((e) => sequenceOf(e) != null)
+      .sort((a, b) => sequenceOf(a) - sequenceOf(b));
     for (const e of sorted) {
-      if (Number(e.seq) <= this._lastSeq) continue;
-      this._lastSeq = Number(e.seq);
+      const seq = sequenceOf(e);
+      if (seq <= this._lastSeq) continue;
+      // A bounded history may begin after the first server event. Treat the
+      // first retained event as the new baseline instead of waiting forever
+      // for events that are no longer available.
+      if (this._lastSeq === 0 && !this.rows.length && !this._pending.size) {
+        this._lastSeq = seq - 1;
+      }
+      this._lastSeq = seq;
       const appended = this._append(e);
       if (appended) for (const r of appended) added.push(r);
     }

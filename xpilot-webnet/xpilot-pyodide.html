@@ -446,7 +446,13 @@ def draw():
             e.preventDefault();
             return;
         }
-        if(e.key==='t'||e.key==='T'){ const ci=document.getElementById('chatInput'); if(ci)ci.focus(); e.preventDefault(); return; }
+        if(e.key==='t'||e.key==='T'){
+            // The auto-hidden overlay uses display:none, so wake it before
+            // requesting focus on the chat input.
+            if(gameLog) gameLog.poke();
+            const ci=document.getElementById('chatInput'); if(ci)ci.focus();
+            e.preventDefault(); return;
+        }
         if(e.key==='r'||e.key==='R'){ doRestart(); return; }
         if(e.key==='v'||e.key==='V'){ setPvpMode(!pvpMode); return; }
         if(keyMap[e.key]) pySetKey(keyMap[e.key],true);
@@ -466,7 +472,7 @@ def draw():
     // game view; fades out after a configurable period of inactivity and
     // reappears on activity. See game-log.js for the LogBuffer / InlineChatUI
     // implementation.
-    const LOG_DEFAULTS = { maxMessages: 60, showTimestamps: true, autoHide: true, inactivityTimeout: 6000, fadeMs: 400 };
+    const LOG_DEFAULTS = { maxMessages: 60, showTimestamps: true, autoHide: true, inactivityTimeout: 3000, fadeMs: 400 };
     let logMaxMessages = LOG_DEFAULTS.maxMessages, logShowTimestamps = LOG_DEFAULTS.showTimestamps,
         logAutoHide = LOG_DEFAULTS.autoHide, logInactivityTimeout = LOG_DEFAULTS.inactivityTimeout,
         logFadeMs = LOG_DEFAULTS.fadeMs;

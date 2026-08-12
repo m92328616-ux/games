@@ -731,8 +731,9 @@ def main(server_host=None, server_port=50000, log_opts=None):
             )
         prev_dead = player.dead
 
-        if netclient:
-            netclient.tick_log(dt)
+        # `netclient` and offline play share the same overlay. Tick it exactly
+        # once per frame; ticking through NetworkClient here as well would make
+        # networked entries expire and fade twice as fast.
         log_overlay.tick(dt)
 
         if score != prev_score:
