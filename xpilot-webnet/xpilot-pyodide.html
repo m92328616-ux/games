@@ -248,8 +248,8 @@ class Shooter:
         self.x=random.uniform(0,WORLD_W); self.y=random.uniform(0,WORLD_H)
         self.vx=math.cos(a)*sp; self.vy=math.sin(a)*sp
         self.r=13; self.angle=a
-        self.fire_cool=2+random.uniform(0,2)
-        self.hp=2; self.hit_flash=0.0
+        self.fire_cool=0.9+random.uniform(0,0.8)
+        self.hp=3; self.hit_flash=0.0
     def update(self, dt, player, enemy_bullets):
         self.x=wrap(self.x+self.vx*dt,WORLD_W)
         self.y=wrap(self.y+self.vy*dt,WORLD_H)
@@ -268,8 +268,8 @@ class Shooter:
         # cooldown always ticks; only fires when visible
         self.fire_cool -= dt
         if self.fire_cool<=0 and visible and not player.dead:
-            self.fire_cool=3+random.uniform(0,2)
-            sp=120
+            self.fire_cool=0.9+random.uniform(0,0.8)
+            sp=140
             enemy_bullets.append(Bullet(
                 self.x+math.cos(self.angle)*(self.r+4),
                 self.y+math.sin(self.angle)*(self.r+4),
