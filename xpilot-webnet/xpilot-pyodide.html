@@ -252,7 +252,7 @@ class Shooter:
         self.x=random.uniform(0,WORLD_W); self.y=random.uniform(0,WORLD_H)
         self.vx=math.cos(a)*sp; self.vy=math.sin(a)*sp
         self.r=13; self.angle=a
-        self.fire_cool=0.9+random.uniform(0,0.8)
+        self.fire_cool=0.7+random.uniform(0,0.6)
         try: d = float(DIFFICULTY)
         except NameError: d = 1.0
         self.hp = max(1, int(round(self.max_hp * d)))
@@ -275,8 +275,8 @@ class Shooter:
         # cooldown always ticks; only fires when visible
         self.fire_cool -= dt
         if self.fire_cool<=0 and visible and not player.dead:
-            self.fire_cool=0.9+random.uniform(0,0.8)
-            sp=140
+            self.fire_cool=0.7+random.uniform(0,0.6)
+            sp=160
             enemy_bullets.append(Bullet(
                 self.x+math.cos(self.angle)*(self.r+4),
                 self.y+math.sin(self.angle)*(self.r+4),
