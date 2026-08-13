@@ -217,13 +217,28 @@ def _broadcast(level_name, timestamp, source, message):
         "source": source,
         "message": message,
     })
-    with _broadcast_lock:
-        _broadcast_queue.append((payload, None))
-        _broadcast_lock.notify()
+
+    # If we're forwarding to a central server, buffer the payload for the
+    # forwarder thread and avoid locally enqueueing the same payload. This
+    # prevents a duplicate delivery path when both a forwarder and local
+    # terminal clients are connected (forwarder -> server -> terminals and
+    # local broadcast -> forwarder -> server -> terminals would double-send).
     if _forwarding:
         with _forward_lock:
             _forwarder_queue.append(payload)
             _forward_lock.notify()
+        return
+
+    # Only enqueue for local broadcast when there are connected clients.
+    # If no terminals are connected, drop the message (prevents memory leaks).
+    with _clients_lock:
+        has_clients = bool(_clients)
+    if not has_clients:
+        return
+
+    with _broadcast_lock:
+        _broadcast_queue.append((payload, None))
+        _broadcast_lock.notify()
 
 
 def _receive(payload, origin_sock):
