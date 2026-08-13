@@ -120,6 +120,7 @@
     </div>
     <div id="info">
         Score: <span id="score">0</span><br>
+        <div style="margin-top:6px;font-size:13px;color:#9aa2c8">Difficulty: <span id="difficultyLabel">Normal</span></div>
         <span style="color:#c87878">● circle</span> 10pts&nbsp;
         <span style="color:#f0a050">▲ shooter</span> 20pts&nbsp;
         <span style="color:#b07fe0">■ tank</span> 50pts<br>
@@ -415,6 +416,12 @@ def draw():
     document.getElementById('gameContainer').style.display='block';
     resize();
     window.addEventListener('resize', resize);
+
+    // update HUD label
+    const pyLabel = document.getElementById('difficultyLabel');
+    if(pyLabel){
+        pyLabel.textContent = (function(d){ if(d>=1.2) return 'Hard'; if(d<=0.9) return 'Easy'; return 'Normal'; })(DIFFICULTY);
+    }
 
     const pyUpdate = pyodide.globals.get('update');
     const pyDraw   = pyodide.globals.get('draw');
