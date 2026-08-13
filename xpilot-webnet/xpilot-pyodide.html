@@ -403,7 +403,12 @@ def draw():
 `;
 
     // Expose a browser-controlled difficulty multiplier to the Python simulation
-    const DIFFICULTY = Number(new URLSearchParams(location.search).get('difficulty')) || 1.0;
+    let DIFFICULTY = (function(){
+        const urlVal = Number(new URLSearchParams(location.search).get('difficulty'));
+        if(isFinite(urlVal) && urlVal>0) return urlVal;
+        try{ const s = localStorage.getItem('xp_difficulty'); if(s) return Number(s); }catch(e){}
+        return 1.0;
+    })();
     pyodide.globals.set('DIFFICULTY', DIFFICULTY);
     pyodide.runPython(pythonCode);
     document.getElementById('loading').style.display='none';
