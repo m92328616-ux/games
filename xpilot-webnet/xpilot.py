@@ -649,7 +649,7 @@ def main(server_host=None, server_port=50000, log_opts=None):
 
         shoot_cool -= dt
         if keys[pygame.K_SPACE] and shoot_cool <= 0 and not player.dead:
-            shoot_cool = 0.15
+            shoot_cool = 0.12
             speed = 400
             bx = player.x + math.cos(player.angle) * 16
             by = player.y + math.sin(player.angle) * 16

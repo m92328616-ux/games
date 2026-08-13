@@ -392,7 +392,7 @@ const DEFAULTS = { sensitivity:3.0, turnMode:'keyboard', zoom:1.0, fpsCap:60, un
 let sensitivity=DEFAULTS.sensitivity, turnMode=DEFAULTS.turnMode, zoomLevel=DEFAULTS.zoom,
     fpsCap=DEFAULTS.fpsCap, unlimitFps=DEFAULTS.unlimitFps;
 
-const THRUST_POWER=200, BULLET_SPEED=400, SHOOT_COOL_BASE=0.15;
+const THRUST_POWER=200, BULLET_SPEED=400, SHOOT_COOL_BASE=0.12;
 const FUEL_MAX=500, FUEL_REGEN_RATE=40, FUEL_IDLE_DELAY=0;
 const FUEL_COST_THRUST=2, FUEL_COST_SHOOT=1, FUEL_COST_LASER=0.4;
 const FUEL_CELL_EXPLOSION_DELAY=1.4;
@@ -1336,7 +1336,7 @@ function updateEnemyAI(e,dt){
         }
         else if(hostile && inRange){
             // become locked onto player when hostile or non-neutral and player is in detection radius
-            e.lockedTarget={timer:4.0};
+            e.lockedTarget={timer:6.0};
             desiredAngle = Math.atan2(ty,tx);
             steerAngle = desiredAngle;
             if((e.kind==='shooter' || e.kind==='tank') && dist<e.preferDist){
@@ -1383,12 +1383,13 @@ function updateEnemyAI(e,dt){
     // permanently stuck on obstacles or geometry.
     const _spd = Math.hypot(e.vx,e.vy);
     if(!e.passive){
-        e.stuckTimer = (e.stuckTimer||0) + (_spd < 6 ? dt : -dt);
+        // more sensitive stuck detection and stronger nudge to avoid getting permanently stuck
+        e.stuckTimer = (e.stuckTimer||0) + (_spd < 10 ? dt : -dt);
         if(e.stuckTimer < 0) e.stuckTimer = 0;
-        if(e.stuckTimer > 1.2){
+        if(e.stuckTimer > 0.6){
             e.wanderAngle += (Math.random()-0.5)*Math.PI*1.8;
-            e.vx += Math.cos(e.wanderAngle) * (e.thrustForce||40) * 0.08;
-            e.vy += Math.sin(e.wanderAngle) * (e.thrustForce||40) * 0.08;
+            e.vx += Math.cos(e.wanderAngle) * (e.thrustForce||40) * 0.16;
+            e.vy += Math.sin(e.wanderAngle) * (e.thrustForce||40) * 0.16;
             e.stuckTimer = 0;
         }
     }
@@ -1537,7 +1538,7 @@ function update(dt){
                         e.alerted = true; e.alertTimer = 6.0;
                         if(b.ownerGen!==undefined){ e.lockedTarget = {type:'entity', gen: b.ownerGen, timer:6.0}; }
                     } else {
-                        if(!e.passive){ e.alerted=true; e.alertTimer=4.0; e.lockedTarget={timer:4.0}; }
+                        if(!e.passive){ e.alerted=true; e.alertTimer=6.0; e.lockedTarget={timer:6.0}; }
                     }
                     if(e.hp<=0){ entities.splice(i,1,e.kind==='circle'?mkCircle():e.kind==='shooter'?mkShooter():mkTank()); }
                     break;
@@ -1586,8 +1587,9 @@ function update(dt){
                 const eBase = (e.baseViewRadius!==undefined)?e.baseViewRadius:(e.viewRadius||0);
                 const eActiveView = eBase + (e.alerted?(e.alertBoost||0):0);
                 if(e.fireCool<=0 && (e.alerted || !e.neutral) && dist<eActiveView && !player.dead){
-                    e.fireCool=3+Math.random()*2;
-                    enemyBullets.push({x:e.x+Math.cos(e.angle)*(e.r+4),y:e.y+Math.sin(e.angle)*(e.r+4),vx:Math.cos(e.angle)*120,vy:Math.sin(e.angle)*120,life:5,ownerGen:e.gen});
+                    // faster, consistent cooldown matching Pyodide: shorter interval
+                    e.fireCool = 0.9 + Math.random()*0.8;
+                    enemyBullets.push({x:e.x+Math.cos(e.angle)*(e.r+4),y:e.y+Math.sin(e.angle)*(e.r+4),vx:Math.cos(e.angle)*140,vy:Math.sin(e.angle)*140,life:5,ownerGen:e.gen});
                 }
             }
         }
@@ -1815,8 +1817,8 @@ function update(dt){
                         e.alerted=true; e.alertTimer=6.0;
                         e.lockedTarget={type:'player',id:MY_ID,timer:6.0};
                     } else {
-                        e.alerted=true; e.alertTimer=4.0;
-                        e.lockedTarget={timer:4.0};
+                        e.alerted=true; e.alertTimer=6.0;
+                        e.lockedTarget={timer:6.0};
                     }
                 }
                 playerBullets=playerBullets.filter(x=>x!==b);

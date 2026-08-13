@@ -15,7 +15,7 @@ function loadUpgradeModuleScript() {
     let activeUpgrade = null;
     function isUpgradeOwned(id) { return ownedUpgrades.has(id); }
     function isUpgradeActive(id) { return activeUpgrade === id; }
-    const SHOOT_COOL_BASE = 0.15;
+    const SHOOT_COOL_BASE = 0.12;
     const LASER_DPS = 7;
     function effectiveShootCool(){ return isUpgradeActive('rapid') ? SHOOT_COOL_BASE / 1.8 : SHOOT_COOL_BASE; }
     function effectiveBulletR() { return isUpgradeActive('big_bullet') ? 6 : 3; }
