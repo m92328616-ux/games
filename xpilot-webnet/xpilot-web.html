@@ -249,6 +249,7 @@
         <span style="color:#b07fe0">■ tank</span> 50pts<br>
         <span id="connStatus" style="color:#888">Offline (single player)</span><span id="roleTag" style="font-size:11px"></span>
         <span id="playerCount"></span><br>
+        <div style="margin-top:6px;font-size:13px;color:#9aa2c8">Difficulty: <span id="difficultyLabel">Normal</span></div>
         <span id="zoomHud" style="color:#6070a0;font-size:11px"></span>
     </div>
     <div id="effectsBar"></div>
@@ -423,6 +424,9 @@ function setDifficulty(labelOrMult, save=true){
             }
         }
     }
+    // update HUD label if present
+    const labelEl = document.getElementById('difficultyLabel');
+    if(labelEl) labelEl.textContent = difficultyLabelFor(DIFFICULTY).replace(/^./, s=>s.toUpperCase());
 }
 const MIN_ZOOM=0.25, MAX_ZOOM=3.0, ZOOM_STEP=0.1;
 function recalcView(){viewW=BASE_VIEW_W/zoomLevel;viewH=viewW*(canvas.height/canvas.width);}
