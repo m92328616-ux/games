@@ -24,6 +24,47 @@ python pong.py
 
 **Requirements:** Python 3 (uses the standard library `tkinter` module — no extra installs needed).
 
+**Linux executable:** A self-contained PyInstaller bundle is available in
+`pong-linux/`. Run it from the repository root:
+```bash
+./pong-linux/pong
+```
+
+### Tetris (`tetris.py`)
+A configurable Pygame Tetris game with multiple difficulty presets, adjustable
+board sizes, scoring, line clearing, and a debug menu for render settings.
+
+**Run:**
+```bash
+pip install pygame
+python tetris.py
+```
+
+**Controls:** Left/Right to move, Down to drop faster, Up to rotate, Space to
+hard-drop, P to pause, M to open the game settings menu, and Esc to close the
+menu or quit.
+
+**Requirements:** Python 3 and `pygame`.
+
+### Minesweeper (`minesweeperpy/minesweeper.py`)
+A desktop Minesweeper game built with Tkinter. Choose Beginner,
+Intermediate, or Expert difficulty, reveal safe cells, and flag suspected
+mines.
+
+**Run:**
+```bash
+cd minesweeperpy
+python minesweeper.py
+cd ..
+```
+
+Left-click to reveal a cell and right-click to flag or unflag a mine. Use the
+New Game button to reset the board. Press Esc or Q to quit.
+
+**Requirements:** Python 3 with Tkinter (normally included with desktop Python
+installations; some Linux distributions provide it as a separate package such
+as `python3-tk`).
+
 ### XPilot Web/Net (`xpilot-webnet/`)
 A minimal XPilot-style top-down spaceship shooter, available in three flavors:
 
