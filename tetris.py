@@ -21,6 +21,12 @@ MAX_GRID_WIDTH = 30
 MIN_GRID_HEIGHT = 8
 MAX_GRID_HEIGHT = 40
 GRAVITY_INTERVAL = 1 / FPS
+GAME_PRESETS = [
+    ("Easy", 20, 30, 10),
+    ("Medium", 24, 34, 20),
+    ("Hard", 28, 38, 30),
+    ("Super Hard", 30, 40, 45),
+]
 
 # Colors
 BLACK = (0, 0, 0)
@@ -118,6 +124,8 @@ class TetrisGame:
         self.fall_timer = 0.0
         self.paused = False
         self.debug_visible = False
+        self.menu_visible = False
+        self.menu_selection = 0
         self.clock = pygame.time.Clock()
         self.font = pygame.font.Font(None, 36)
         self.reset_game()
@@ -144,6 +152,30 @@ class TetrisGame:
     def adjust_render_fps(self, amount):
         """Change render smoothness without changing gravity speed."""
         self.render_fps = max(MIN_RENDER_FPS, min(MAX_RENDER_FPS, self.render_fps + amount))
+
+    def open_menu(self):
+        """Open the preset menu and pause gameplay."""
+        self.menu_visible = True
+        self.paused = True
+        self.held_keys.clear()
+
+    def close_menu(self):
+        """Close the preset menu and resume gameplay."""
+        self.menu_visible = False
+        self.paused = False
+        self.held_keys.clear()
+
+    def apply_preset(self):
+        """Apply the selected preset and start a fresh board."""
+        _, width, height, render_fps = GAME_PRESETS[self.menu_selection]
+        self.grid_width = width
+        self.grid_height = height
+        self.render_fps = render_fps
+        self.screen = pygame.display.set_mode(
+            (self.grid_width * GRID_SIZE, self.grid_height * GRID_SIZE)
+        )
+        self.reset_game()
+        self.close_menu()
 
     def is_valid_position(self, tetromino):
         """Check if tetromino position is valid"""
@@ -192,7 +224,24 @@ class TetrisGame:
                 continue
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
+                    if self.menu_visible:
+                        self.close_menu()
+                        continue
                     return False
+                if event.key == pygame.K_m:
+                    if self.menu_visible:
+                        self.close_menu()
+                    else:
+                        self.open_menu()
+                    continue
+                if self.menu_visible:
+                    if event.key == pygame.K_UP:
+                        self.menu_selection = (self.menu_selection - 1) % len(GAME_PRESETS)
+                    elif event.key == pygame.K_DOWN:
+                        self.menu_selection = (self.menu_selection + 1) % len(GAME_PRESETS)
+                    elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                        self.apply_preset()
+                    continue
                 if event.key == pygame.K_p:
                     if not self.debug_visible:
                         self.paused = not self.paused
@@ -339,6 +388,23 @@ class TetrisGame:
             for index, line in enumerate(debug_lines):
                 text = debug_font.render(line, True, WHITE)
                 self.screen.blit(text, (10, 90 + index * 24))
+
+        if self.menu_visible:
+            screen_width, screen_height = self.screen.get_size()
+            menu_font = pygame.font.Font(None, 30)
+            title = self.font.render("GAME PRESETS", True, YELLOW)
+            self.screen.blit(title, (screen_width // 2 - title.get_width() // 2, 180))
+            for index, (name, width, height, render_fps) in enumerate(GAME_PRESETS):
+                color = YELLOW if index == self.menu_selection else WHITE
+                marker = "> " if index == self.menu_selection else "  "
+                line = menu_font.render(
+                    f"{marker}{name}: {width} x {height} @ {render_fps} FPS", True, color
+                )
+                self.screen.blit(line, (screen_width // 2 - 150, 230 + index * 34))
+            hint = pygame.font.Font(None, 24).render(
+                "Up/Down select  Enter apply  M/Esc close", True, WHITE
+            )
+            self.screen.blit(hint, (screen_width // 2 - 150, 390))
 
         pygame.display.flip()
 
