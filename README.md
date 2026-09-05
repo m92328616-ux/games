@@ -46,6 +46,33 @@ menu or quit.
 
 **Requirements:** Python 3 and `pygame`.
 
+### Space Invaders (`spaceinvaders.py`)
+A terminal-based Space Invaders game that loads its five alien rows and
+animations from [`ASCINV.DAT`](ASCINV.DAT) or preferablly, [`ASCINVINFO.DAT`](ASCINVINFO.DAT).
+The player uses frame `018`, enemy destruction uses frame `022`, player impacts randomly use 
+frame `020` or `021`, and thebonus saucer uses frame `023`.
+Player collisions include the sprite edges so side impacts are not missed.
+After a direct hit, the player respawns at the right edge. Aliens remain
+uncolored; the player is light green, player shots are yellow, and enemy shots
+are magenta. Both shot types use frame `019`, with enemy shots drawn over the
+player. The game has 10 levels with exponentially faster enemy movement and
+animation; the remaining aliens accelerate further when only a few are left.
+Enemy firing keeps its original cadence. A one-second pause follows a player
+death, and each new level displays its title before play resumes. Bullets keep
+their player speed, while the saucer appears rarely and randomly crosses from
+either side.
+
+**Run:**
+```bash
+python spaceinvaders.py
+```
+
+**Controls:** Left/Right or A/D to move, Space to fire, R to restart after a
+win or loss, and Q or Esc to quit. The terminal should be at least 68 columns
+by 22 rows.
+
+**Requirements:** Python 3 with a curses-capable terminal.
+
 ### Minesweeper (`minesweeperpy/minesweeper.py`)
 A desktop Minesweeper game built with Tkinter. Choose Beginner,
 Intermediate, or Expert difficulty, reveal safe cells, and flag suspected
